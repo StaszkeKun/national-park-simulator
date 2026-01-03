@@ -1,7 +1,8 @@
-#include "config.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
+#include "config.h"
+#include "vector.h"
 
 void checkConfiguration();
 

@@ -6,4 +6,4 @@ else
     echo "Building with no test"
 fi
 
-gcc -Iinclude -lm -lpthread $FLAG src/main.c -o bin/main
+gcc -Iinclude $FLAG src/main.c -lm -lpthread -o bin/main

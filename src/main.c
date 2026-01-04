@@ -3,16 +3,20 @@
 #include <errno.h>
 #include "config.h"
 #include "vector.h"
+#include "globals.h"
 
-void checkConfiguration();
+void check_configuration();
+void init();
+void end_simulation();
 
 int main()
 {
-    checkConfiguration();
+    printf("%lf\n", tick());
+    check_configuration();
     exit(EXIT_SUCCESS);
 }
 
-void checkConfiguration()
+void check_configuration()
 {
     if (BRIDGE_LIMIT >= GROUP_SIZE)
     {
@@ -41,4 +45,14 @@ void checkConfiguration()
         perror("[ERROR]: OPEN_TIME and CLOSE_TIME can't be negative");
         exit(EXIT_FAILURE);
     }
+}
+
+void init()
+{
+
+}
+
+void end_simulation()
+{
+
 }

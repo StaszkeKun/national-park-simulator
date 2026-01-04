@@ -1,3 +1,5 @@
+#pragma once
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <errno.h>
@@ -74,6 +76,15 @@ void _vector_set_length(vector_t* vec, int new_length)
     }
 }
 
+void vector_at(vector_t* vec, unsigned int pos, void* out_element)
+{
+    if (pos >= vec->length) {
+        printf("[ERROR]: ATTEMPTING TO ACCESS VECTOR OUT OF BOUNDS\n");
+        return;
+    }
+    memcpy(out_element, vec->ptr + pos * vec->element_size, vec->element_size);
+}
+
 void vector_push_back(vector_t* vec, void* new_element)
 {
     _vector_set_length(vec, vec->length + 1);
@@ -82,11 +93,42 @@ void vector_push_back(vector_t* vec, void* new_element)
 
 void vector_pop_back(vector_t* vec, void* out_element)
 {
+    if (out_element == NULL)
+    {
+        printf("[ERROR]: attempting to pop to NULL pointer\n");
+        return;
+    }
+
     if (vec->length == 0)
     {
         printf("[ERROR]: attempting to pop an empty vector\n");
         return;
     }
     memcpy(out_element, vec->ptr + (vec->length - 1) * vec->element_size, vec->element_size);
+    _vector_set_length(vec, vec->length - 1);
+}
+
+void vector_push_front(vector_t* vec, void* new_element)
+{
+    _vector_set_length(vec, vec->length + 1);
+    memmove(vec->ptr + vec->element_size, vec->ptr, (vec->length - 1) * vec->element_size);
+    memcpy(vec->ptr, new_element, vec->element_size);
+}
+
+void vector_pop_front(vector_t* vec, void* out_element)
+{
+    if (out_element == NULL)
+    {
+        printf("[ERROR]: attempting to pop to NULL pointer\n");
+        return;
+    }
+
+    if (vec->length == 0)
+    {
+        printf("[ERROR]: attempting to pop an empty vector\n");
+        return;
+    }
+    memcpy(out_element, vec->ptr, vec->element_size);
+    memmove(vec->ptr, vec->ptr + vec->element_size, (vec->length - 1) * vec->element_size);
     _vector_set_length(vec, vec->length - 1);
 }

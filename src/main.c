@@ -4,6 +4,9 @@
 #include "config.h"
 #include "vector.h"
 #include "globals.h"
+#include "constants.h"
+#include "ipc.h"
+#include <sys/wait.h>
 
 void check_configuration();
 void init();

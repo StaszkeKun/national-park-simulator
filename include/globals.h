@@ -6,6 +6,7 @@
 #include <stdbool.h>
 #include <math.h>
 #include "config.h"
+#include "vector.h"
 
 typedef struct
 {

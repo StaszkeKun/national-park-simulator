@@ -45,6 +45,7 @@ enum SharedMemoryIds
     SHM_GUIDES_DATA
 };
 
+#define NSEMS 3
 enum SemaphoreIds
 {
     SEM_BRIDGE,

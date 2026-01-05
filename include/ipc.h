@@ -4,6 +4,7 @@
 #include <signal.h>
 #include <sys/ipc.h>
 #include <sys/shm.h>
+#include <sys/sem.h>
 #include "globals.h"
 
 #define CREATE_NEW IPC_CREAT|0600
@@ -35,7 +36,7 @@ pid_t b_execute(char* path, char* arg1)
     return new_pid;
 }
 
-void b_send_signal(pid_t target, int signal_id)
+void b_signal(pid_t target, int signal_id)
 {
     if(kill(target, signal_id) < 0)
     {
@@ -52,7 +53,7 @@ int b_shm_get_id(int id, size_t size)
     int shmid = shmget(_get_key('M'+id), size, CREATE_NEW);
     if (shmid == -1)
     {
-        perror("[ERROR]: shmget error");
+        perror("[ERROR]: Shared memory get id error");
         exit(EXIT_FAILURE);
     }
     return shmid;
@@ -74,4 +75,75 @@ void* b_shm_attach(int shmid)
         exit(EXIT_FAILURE);
     }
     return ptr;
+}
+
+//semaphores
+int b_sem_get_id()
+{
+    int semid = semget(_get_key(0), NSEMS, CREATE_NEW);
+    if (semid < 0)
+    {
+        perror("[ERROR]: Semaphore get id error");
+        exit(EXIT_FAILURE);
+    }
+    return semid;
+}
+
+void b_sem_set(int semid, int semnum, int val)
+{
+    if (semctl(semid, semnum, SETVAL, val) < 0)
+    {
+        perror("[ERROR]: Semaphore set error");
+    }
+}
+
+int b_sem_check(int semid, int semnum)
+{
+    int value = semctl(semid, semnum, GETVAL);
+    if (value < 0)
+    {
+        perror("[ERROR]: Semaphore check value error");
+    }
+    return value;
+}
+
+void b_sem_remove(int semid)
+{
+    if (semctl(semid, 0, IPC_RMID) < 0)
+    {
+        perror("[ERROR]: Semaphore remove error");
+    }
+}
+
+void b_sem_v(int semid, int semnum, int val)
+{
+    struct sembuf op;
+    op.sem_num = semnum;
+    op.sem_op = val;
+    op.sem_flg = 0;
+
+    if (semop(semid, &op, 1) < 0)
+    {
+        perror("[ERROR]: Semaphore P operation error");
+        exit(EXIT_FAILURE);
+    }
+}
+
+void b_sem_p(int semid, int semnum, int val)
+{
+    struct sembuf op;
+    op.sem_num = semnum;
+    op.sem_op = -val;
+    op.sem_flg = 0;
+
+    if (semop(semid, &op, 1) < 0)
+    {
+        if (errno == EINTR)
+        {
+            b_sem_p(semid, semnum, val);
+            return;
+        }
+        perror("[ERROR]: Semaphore P operation error");
+        exit(EXIT_FAILURE);
+    }
 }

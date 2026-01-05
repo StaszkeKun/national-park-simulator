@@ -46,6 +46,28 @@ void b_signal(pid_t target, int signal_id)
     }
 }
 
+pthread_t b_execute_thread(void(*func()))
+{
+    pthread_t tid;
+    if (pthread_create(&tid, NULL, (void*(*)(void*))func, NULL) < 0)
+    {
+        perror("[ERROR]: execute thread error");
+        exit(EXIT_FAILURE);
+    }
+    return tid;
+}
+
+void b_sleep(float time)
+{
+    struct timespec tv, rem;
+    tv.tv_sec = (time_t)time;
+    tv.tv_nsec = (long)((time - tv.tv_sec) * 1e9);
+
+    while (nanosleep(&tv, &rem) == -1)
+    {
+        tv = rem;
+    }
+}
 
 //shared memory
 int b_shm_get_id(int id, size_t size)
@@ -81,7 +103,7 @@ void* b_shm_attach(int shmid)
 int b_sem_get_id()
 {
     int semid = semget(_get_key(0), NSEMS, CREATE_NEW);
-    if (semid < 0)
+    if (semid == -1)
     {
         perror("[ERROR]: Semaphore get id error");
         exit(EXIT_FAILURE);
@@ -144,6 +166,72 @@ void b_sem_p(int semid, int semnum, int val)
             return;
         }
         perror("[ERROR]: Semaphore P operation error");
+        exit(EXIT_FAILURE);
+    }
+}
+
+//message queue
+typedef struct
+{
+    long mtype;
+    int message;
+} message_t;
+
+int b_msq_get_id(int id)
+{
+    int msqid = msgget(_get_key('a'+id), CREATE_NEW);
+    if (msqid == -1)
+    {
+        perror("[ERROR]: message queue get id error");
+        exit(EXIT_FAILURE);
+    }
+    return msqid;
+}
+
+void b_msq_send(int msqid, long type, int message)
+{
+    message_t msg;
+    msg.mtype = type;
+    msg.message = message;
+    if (msgsnd(msqid, &msg, sizeof(int), 0) == -1)
+    {
+        perror("[ERROR]: message queue send error");
+        exit(EXIT_FAILURE);
+    }
+}
+
+int b_msg_receive(int msqid, long type)
+{
+    message_t msg;
+    if(msgrcv(msqid, &msg, sizeof(int), type, NULL) == -1)
+    {
+        perror("[ERROR]: message queue receive error");
+        exit(EXIT_FAILURE);
+    }
+    return msg.message;
+}
+
+int b_msg_receive_nowait(int msqid, long type)
+{
+    message_t msg;
+    msg.mtype = type;
+    if(msgrcv(msqid, &msg, sizeof(int), type, IPC_NOWAIT) == -1)
+    {
+        if (errno == ENOMSG)
+        {
+            return -1;
+        }
+        perror("[ERROR]: message queue receive error");
+        exit(EXIT_FAILURE);
+    }
+    return msg.message;
+}
+
+void b_msq_remove(int msqid)
+{
+    if (msgctl(msqid, IPC_RMID, NULL) == -1)
+    {
+        perror("[ERROR]: message queue remove error");
         exit(EXIT_FAILURE);
     }
 }

@@ -235,3 +235,67 @@ void b_msq_remove(int msqid)
         exit(EXIT_FAILURE);
     }
 }
+
+//fifo
+void b_fifo_delete(char* path)
+{
+    if (unlink(path) == -1)
+    {
+        if (errno != ENOENT)
+        {
+            perror("[ERROR]: fifo delete error");
+            exit(EXIT_FAILURE);
+        }
+    }
+}
+
+void b_fifo_create(char* path)
+{
+    b_fifo_delete(path);
+    if (mkfifo(path, CREATE_NEW) == -1)
+    {
+        perror("[ERROR]: fifo create error");
+        exit(EXIT_FAILURE);
+    }
+}
+
+int b_fifo_open(char* path, int oflag)
+{
+    int fd = open(path, oflag);
+    if (fd < 0)
+    {
+        perror("[ERROR]: fd open error");
+        exit(EXIT_FAILURE);
+    }
+    return fd;
+}
+
+void b_fifo_close(int fd)
+{
+    if (close(fd) < 0)
+    {
+        perror("[ERROR]: fd close error");
+    }
+}
+
+ssize_t b_fifo_write(int fd, const void* buf, size_t size)
+{
+    ssize_t result = write(fd, buf, size);
+    if (result < 0)
+    {
+        perror("[ERROR]: fd write error");
+        exit(EXIT_FAILURE);
+    }
+    return result;
+}
+
+ssize_t b_fifo_read(int fd, void* buf, size_t size)
+{
+    ssize_t result = read(fd, buf, size);
+    if (result < 0)
+    {
+        perror("[ERROR]: fd read error");
+        exit(EXIT_FAILURE);
+    }
+    return result;
+}

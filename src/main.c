@@ -3,24 +3,66 @@
 #include <errno.h>
 #include "config.h"
 #include "vector.h"
-#include "globals.h"
+#include "types.h"
 #include "constants.h"
-#include "ipc.h"
+#include "utils.h"
 #include <sys/wait.h>
 
 void check_configuration();
 void init();
 void end_simulation();
 
+pthread_t zombie_thread;
+void zombie_cleaner()
+{
+    while(true)
+    {
+        wait(NULL);
+    }
+}
+
+shared_data_t* shared_data;
+guide_data_t* guides_data;
+visitor_data_t* visitors_data;
+vector_t* processes;
+
 int main()
 {
-    printf("%lf\n", tick());
     check_configuration();
-    exit(EXIT_SUCCESS);
+    init();
+
+    processes = vector_new(sizeof(pid_t));
+
+    pid_t new_process;
+    new_process = b_execute("./bin/cashier", NULL);
+    if (new_process == -1) end_simulation();
+    vector_push_back(processes, &new_process);
+    for(int i = 0; i < GUIDES_NUMBER; i++)
+    {
+        new_process = b_execute("./bin/guide", NULL);
+        if (new_process == -1) end_simulation();
+        vector_push_back(processes, &new_process);
+    }
+
+    while(true)
+    {
+        b_sleep(b_randf(1, 5));
+        new_process = b_execute("./bin/visitor", NULL);
+        if (new_process == -1)
+        {
+            printf("[ERROR]: visitor creation error");
+            continue;
+        }
+        vector_push_back(processes, &new_process);
+    }
+
+    end_simulation();
+    return 0;
 }
 
 void check_configuration()
 {
+    //TODO: more conditions (checking with limits, checking if makes sense (max_kids + 1 > max_group))
     if (BRIDGE_LIMIT >= GROUP_SIZE)
     {
         errno = EDOM;
@@ -35,7 +77,7 @@ void check_configuration()
         exit(EXIT_FAILURE);
     }
 
-    if (RIVER_LIMIT >= 1.5 * GROUP_SIZE)
+    if (FERRY_LIMIT >= 1.5 * GROUP_SIZE)
     {
         errno = EDOM;
         perror("[ERROR]: RIVER_LIMIT must be lower than 1.5*GROUP_SIZE");
@@ -52,10 +94,47 @@ void check_configuration()
 
 void init()
 {
+    signal(SIGINT, end_simulation);
+    zombie_thread = b_execute_thread(zombie_cleaner);
 
+    srand(time(NULL));
+
+    shared_data = b_shm_attach(b_shm_get_id(SHM_SHARED_DATA, sizeof(shared_data_t)));
+    shared_data->start_time = b_tick();
+    shared_data->bridge_direction = true;
+    shared_data->groups_on_bridge = 0;
+    shared_data->bridge_queue_clockwise = vector_new(sizeof(guide_data_t));
+    shared_data->bridge_queue_aclockwise = vector_new(sizeof(guide_data_t));
+    shared_data->tower_queue = vector_new(sizeof(visitor_data_t));
+    shared_data->ferry_side = true;
+    shared_data->ferry_seats = FERRY_LIMIT;
+    shared_data->ferry_queue_clockwise = vector_new(sizeof(guide_data_t));
+    shared_data->ferry_queue_aclockwise = vector_new(sizeof(guide_data_t));
 }
 
 void end_simulation()
 {
+    pthread_cancel(zombie_thread);
+    pthread_join(zombie_thread, NULL);
 
+    vector_free(shared_data->bridge_queue_clockwise);
+    vector_free(shared_data->bridge_queue_aclockwise);
+    vector_free(shared_data->tower_queue);
+    vector_free(shared_data->ferry_queue_clockwise);
+    vector_free(shared_data->ferry_queue_aclockwise);
+
+    b_shm_remove(b_shm_get_id(SHM_GUIDES_DATA, sizeof(shared_data_t)));
+    b_shm_dettach(shared_data);
+
+    while(processes->length > 0) {
+        pid_t pid;
+        vector_pop_back(processes, &pid);
+        if (b_process_exist(pid)) {
+            b_signal(pid, SIGINT);
+        }
+    }
+
+    vector_free(processes);
+
+    exit(EXIT_SUCCESS);
 }

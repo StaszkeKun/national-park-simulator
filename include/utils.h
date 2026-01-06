@@ -1,11 +1,17 @@
 #pragma once
 
+#include <fcntl.h>
 #include <stdio.h>
 #include <signal.h>
+#include <unistd.h>
 #include <sys/ipc.h>
 #include <sys/shm.h>
 #include <sys/sem.h>
-#include "globals.h"
+#include <sys/msg.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include "types.h"
+#include "constants.h"
 
 #define CREATE_NEW IPC_CREAT|0600
 
@@ -25,7 +31,6 @@ pid_t b_execute(char* path, char* arg1)
 
     if (new_pid == 0)
     {
-        printf("executing path...\n");
         if (execl(path, path, arg1, NULL) < 0)
         {
             perror("[ERROR]: execl error");
@@ -36,17 +41,7 @@ pid_t b_execute(char* path, char* arg1)
     return new_pid;
 }
 
-void b_signal(pid_t target, int signal_id)
-{
-    if(kill(target, signal_id) < 0)
-    {
-        char msg[50];
-        sprintf(msg, "[ERROR]: signal (%d) sending error", signal_id);
-        perror(msg);
-    }
-}
-
-pthread_t b_execute_thread(void(*func()))
+pthread_t b_execute_thread(void(*func)())
 {
     pthread_t tid;
     if (pthread_create(&tid, NULL, (void*(*)(void*))func, NULL) < 0)
@@ -55,6 +50,32 @@ pthread_t b_execute_thread(void(*func()))
         exit(EXIT_FAILURE);
     }
     return tid;
+}
+
+void b_signal(pid_t target, int signal)
+{
+    if(kill(target, signal) < 0)
+    {
+        char msg[50];
+        sprintf(msg, "[ERROR]: signal (%d) sending error", signal);
+        perror(msg);
+    }
+}
+
+void b_raise(int signal)
+{
+    b_signal(getpid(), signal);
+}
+
+bool b_process_exist(pid_t pid)
+{
+    if (pid <= 0) return false;
+    kill(pid, 0);
+    if (errno == ESRCH)
+    {
+        return false;
+    }
+    return true;
 }
 
 void b_sleep(float time)
@@ -67,6 +88,41 @@ void b_sleep(float time)
     {
         tv = rem;
     }
+}
+
+// microsecond-precision UNIX epoch
+double b_tick()
+{
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    return (double)tv.tv_sec + (double)tv.tv_usec/1000000.0;
+}
+
+double b_get_time_of_day(double start_time)
+{
+    return fmod(b_tick() - start_time, CYCLE_TIME);
+}
+
+float b_randf(float min, float max)
+{
+    return min + (float)rand() / RAND_MAX * (max-min);
+}
+
+int b_randi(int min, int max)
+{
+    return min + rand() % (max - min);
+}
+
+visitor_data_t* b_get_visitor_by_pid(visitor_data_t* visitor_data_array, pid_t searched_pid)
+{
+    for (int i = 0; i < VISITORS_LIMIT; i++)
+    {
+        if (visitor_data_array[i].pid == searched_pid)
+        {
+            return visitor_data_array + i;
+        }
+    }
+    return NULL;
 }
 
 //shared memory
@@ -97,6 +153,15 @@ void* b_shm_attach(int shmid)
         exit(EXIT_FAILURE);
     }
     return ptr;
+}
+
+void b_shm_dettach(void* addr)
+{
+    if (shmdt(addr) == -1)
+    {
+        perror("[ERROR]: Shared memory detach error");
+        exit(EXIT_FAILURE);
+    }
 }
 
 //semaphores
@@ -174,7 +239,7 @@ void b_sem_p(int semid, int semnum, int val)
 typedef struct
 {
     long mtype;
-    int message;
+    long message;
 } message_t;
 
 int b_msq_get_id(int id)
@@ -188,34 +253,37 @@ int b_msq_get_id(int id)
     return msqid;
 }
 
-void b_msq_send(int msqid, long type, int message)
+void b_msq_send(int msqid, long type, long message)
 {
     message_t msg;
     msg.mtype = type;
     msg.message = message;
-    if (msgsnd(msqid, &msg, sizeof(int), 0) == -1)
+    if (msgsnd(msqid, &msg, sizeof(long), 0) == -1)
     {
         perror("[ERROR]: message queue send error");
         exit(EXIT_FAILURE);
     }
 }
 
-int b_msg_receive(int msqid, long type)
+long b_msq_receive(int msqid, long type)
 {
     message_t msg;
-    if(msgrcv(msqid, &msg, sizeof(int), type, NULL) == -1)
+    if (msgrcv(msqid, &msg, sizeof(long), type, 0) == -1)
     {
+        if (errno == EINTR)
+        {
+            return b_msq_receive(msqid, type);
+        }
         perror("[ERROR]: message queue receive error");
         exit(EXIT_FAILURE);
     }
     return msg.message;
 }
 
-int b_msg_receive_nowait(int msqid, long type)
+long b_msq_receive_nowait(int msqid, long type)
 {
     message_t msg;
-    msg.mtype = type;
-    if(msgrcv(msqid, &msg, sizeof(int), type, IPC_NOWAIT) == -1)
+    if (msgrcv(msqid, &msg, sizeof(long), type, IPC_NOWAIT) == -1)
     {
         if (errno == ENOMSG)
         {
@@ -261,17 +329,21 @@ void b_fifo_create(char* path)
 
 int b_fifo_open(char* path, int oflag)
 {
+    printf("b\n");
     int fd = open(path, oflag);
+    printf("b\n");
     if (fd < 0)
     {
         perror("[ERROR]: fd open error");
         exit(EXIT_FAILURE);
     }
+    printf("b\n");
     return fd;
 }
 
 void b_fifo_close(int fd)
 {
+    printf("%d\n", fd);
     if (close(fd) < 0)
     {
         perror("[ERROR]: fd close error");
@@ -283,6 +355,10 @@ ssize_t b_fifo_write(int fd, const void* buf, size_t size)
     ssize_t result = write(fd, buf, size);
     if (result < 0)
     {
+        if (errno == EINTR || errno == EAGAIN)
+        {
+            return b_fifo_write(fd, buf, size);
+        }
         perror("[ERROR]: fd write error");
         exit(EXIT_FAILURE);
     }
@@ -294,6 +370,10 @@ ssize_t b_fifo_read(int fd, void* buf, size_t size)
     ssize_t result = read(fd, buf, size);
     if (result < 0)
     {
+        if (errno == EINTR)
+        {
+            return b_fifo_read(fd, buf, size);
+        }
         perror("[ERROR]: fd read error");
         exit(EXIT_FAILURE);
     }

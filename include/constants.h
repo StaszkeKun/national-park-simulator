@@ -5,7 +5,7 @@
 
 #define SIG_LEAVE_TOWER SIGUSR1
 #define SIG_LEAVE_PARK SIGUSR2
-#define SIF_WAKE_UP SIGRTMIN
+#define SIG_WAKE_UP SIGRTMIN
 
 typedef enum
 {
@@ -16,11 +16,12 @@ typedef enum
     VS_FOLLOWING_GUIDE,
     VS_AT_BRIDGE_QUEUE,
     VS_AT_BRIDGE,
+    VS_AT_TOWER_QUEUE,
     VS_GOING_UP_TOWER,
     VS_AT_TOWER,
     VS_GOING_DOWN_TOWER,
     VS_AT_RIVER_QUEUE,
-    VS_WAITING_FOR_FERRY_START,
+    VS_AWAITING_FERRY_START,
     VS_AT_FERRY_VOYAGE,
     VS_LEAVING
 } visitor_status_t;
@@ -28,7 +29,7 @@ typedef enum
 typedef enum
 {
     GS_NONE=0,
-    GS_GATHERING,
+    GS_GATHERING_GROUP,
     GS_MOVING_TO_BRIDGE,
     GS_AT_BRIDGE,
     GS_MOVING_TO_TOWER,
@@ -41,8 +42,8 @@ typedef enum
 enum SharedMemoryIds
 {
     SHM_SHARED_DATA,
-    SHM_VISITORS_DATA,
-    SHM_GUIDES_DATA
+    SHM_GUIDES_DATA,
+    SHM_VISITOR_DATA
 };
 
 #define NSEMS 3
@@ -50,13 +51,13 @@ enum SemaphoreIds
 {
     SEM_BRIDGE,
     SEM_TOWER,
-    SEM_RIVER
+    SEM_RIVER,
+    MUTEX_BRIDGE,
+    MUTEX_FERRY
 };
 
 enum MessageQueueIds
 {
     MSG_CASHIER,
-    MSG_GUIDES,
-    MSG_BRIDGE,
-    MSG_FERRY
+    MSG_GUIDES
 };

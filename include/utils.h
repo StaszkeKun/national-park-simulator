@@ -67,6 +67,15 @@ void b_raise(int signal)
     b_signal(getpid(), signal);
 }
 
+void b_wait_for_wakeup()
+{
+    sigset_t mask;
+    sigemptyset(&mask);
+    sigaddset(&mask, SIG_WAKE_UP);
+    
+    sigwaitinfo(&mask, NULL);
+}
+
 bool b_process_exist(pid_t pid)
 {
     if (pid <= 0) return false;
@@ -329,15 +338,12 @@ void b_fifo_create(char* path)
 
 int b_fifo_open(char* path, int oflag)
 {
-    printf("b\n");
     int fd = open(path, oflag);
-    printf("b\n");
     if (fd < 0)
     {
         perror("[ERROR]: fd open error");
         exit(EXIT_FAILURE);
     }
-    printf("b\n");
     return fd;
 }
 

@@ -11,8 +11,8 @@ void sell_ticket(visitor_data_t* visitor_data);
 void log_today();
 
 int msgid;
-int fifo_regular;
-int fifo_vip;
+int fifo_regular = -1;
+int fifo_vip = -1;
 struct pollfd fds[2];
 pid_t current_pid;
 shared_data_t* shared_data;
@@ -31,9 +31,21 @@ void print_leaving()
     while(true)
     {
         long visitor_pid = b_msq_receive(msgid, 2);
-        visitor_data = b_get_visitor_by_pid(visitor_data, visitor_pid);
+        visitor_data = b_get_visitor_by_pid(visitors_data, visitor_pid);
         printf("[CASHIER]: Visitor %ld with %d kids left\n", visitor_pid, visitor_data->kids_count);
+        b_signal(visitor_pid, SIGINT);
     }
+}
+
+void handle_wake_up(int sig)
+{
+    (void)sig;
+}
+
+void handle_kill(int sig)
+{
+    (void)sig;
+    end_simulation();
 }
 
 int main()
@@ -62,10 +74,8 @@ int main()
         if (fds[1].revents & POLLIN)
         {
             b_fifo_read(fifo_vip, &current_pid, sizeof(pid_t));
-        }
-
-        //regular queue
-        if (fds[0].revents & POLLIN)
+        }//regular queue
+        else if (fds[0].revents & POLLIN)
         {
             b_fifo_read(fifo_regular, &current_pid, sizeof(pid_t));
         }
@@ -79,7 +89,7 @@ int main()
             continue;
         }
 
-        if (1 + current_visitor_data->kids_count + visitors_today > VISITORS_LIMIT)
+        if (1 + current_visitor_data->kids_count + visitors_today >= VISITORS_LIMIT)
         {
             printf("[CASHIER]: Visitor %d with %d kids dismissed - daily visitor limit\n", current_pid, current_visitor_data->kids_count);
             continue;
@@ -94,7 +104,21 @@ int main()
 
 void init()
 {
-    signal(SIGINT, end_simulation);
+    struct sigaction sa;
+    sa.sa_handler = handle_kill;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    sigaction(SIGINT, &sa, NULL);
+
+    sa.sa_handler = handle_wake_up;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    sigaction(SIG_WAKE_UP, &sa, NULL);
+
+    sigset_t set;
+    sigemptyset(&set);
+    sigaddset(&set, SIG_WAKE_UP);
+    sigprocmask(SIG_BLOCK, &set, NULL);
 
     msgid = b_msq_get_id(MSG_CASHIER);
 
@@ -117,18 +141,13 @@ void init()
 
 void end_simulation()
 {
-    b_msq_remove(msgid);
-
-    b_shm_remove(b_shm_get_id(SHM_SHARED_DATA, sizeof(shared_data_t)));
-    b_shm_remove(b_shm_get_id(SHM_VISITOR_DATA, sizeof(visitor_data_t) * VISITORS_LIMIT));
-    b_shm_remove(b_shm_get_id(SHM_GUIDES_DATA, sizeof(guide_data_t) * GUIDES_NUMBER));
     b_shm_dettach(shared_data);
     b_shm_dettach(visitors_data);
     b_shm_dettach(guides_data);
 
-    b_fifo_close(fifo_regular);
+    if(fifo_regular >= 0) b_fifo_close(fifo_regular);
     b_fifo_delete(TICKET_REGULAR_PATH);
-    b_fifo_close(fifo_vip);
+    if(fifo_vip >= 0) b_fifo_close(fifo_vip);
     b_fifo_delete(TICKET_VIP_PATH);
 
     pthread_cancel(leaving_thread);
@@ -163,6 +182,7 @@ void sell_ticket(visitor_data_t* visitor_data)
         printf("[CASHIER]: let VIP %d in\n", visitor_data->pid);
         visitors_pids[visitors_today] = visitor_data->pid;
         visitors_today++;
+        visitor_data->status = VS_AWAITING_GUIDE; //this tells VIP to choose a direction and start going by themselves
         return;
     }
 
@@ -172,12 +192,12 @@ void sell_ticket(visitor_data_t* visitor_data)
     visitors_today++;
     for(int i = 0; i < visitor_data->kids_count; i++)
     {
-        if (visitor_data->kids[i].age >= 7)
+        if (visitor_data->kids[i]->age >= 7)
         {
             sum += TICKET_PRICE;
             sold++;
         }
-        visitors_pids[visitors_today] = visitor_data->kids[i].tid;
+        visitors_pids[visitors_today] = visitor_data->kids[i]->tid;
         visitors_today++;
     }
 
@@ -187,7 +207,7 @@ void sell_ticket(visitor_data_t* visitor_data)
     printf("[CASHIER]: let visitor %d in\n", visitor_data->pid);
     for(int i = 0; i < visitor_data->kids_count; i++)
     {
-        printf("[CASHIER]: let kid %ld in under visitor %d protection\n", visitor_data->kids[i].tid, visitor_data->pid);
+        printf("[CASHIER]: let kid %ld in under visitor %d protection\n", visitor_data->kids[i]->tid, visitor_data->pid);
     }
     visitor_data->status = VS_AWAITING_GUIDE;
     b_msq_send(msgid, 1, visitor_data->pid);
@@ -197,19 +217,23 @@ void log_today()
 {
     while(1)
     {
+        bool all_ready = true;
         for(int i = 0; i < GUIDES_NUMBER; i++)
         {
             if(guides_data[i].status != GS_GATHERING_GROUP)
             {
-                pause(); //wait for wakeup from arriving guide
-                continue;
+                all_ready = false;
+                break;
             }
         }
-        break;
+
+        if (all_ready) break;
+
+        b_wait_for_wakeup();
     }
 
     char title[100];
-    sprintf(title, "%f day %d.log", shared_data->start_time, day);
+    sprintf(title, "%d_day_%d.log", (int)shared_data->start_time, day);
     FILE* file = fopen(title, "w");
     if(file == NULL)
     {
@@ -231,4 +255,6 @@ void log_today()
     {
         fprintf(file, "%ld\n", visitors_pids[i]);
     }
+
+    fclose(file);
 }

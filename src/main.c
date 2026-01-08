@@ -21,6 +21,12 @@ void zombie_cleaner()
     }
 }
 
+void handle_kill(int sig)
+{
+    (void)sig;
+    end_simulation();
+}
+
 shared_data_t* shared_data;
 guide_data_t* guides_data;
 visitor_data_t* visitors_data;
@@ -39,7 +45,9 @@ int main()
     vector_push_back(processes, &new_process);
     for(int i = 0; i < GUIDES_NUMBER; i++)
     {
-        new_process = b_execute("./bin/guide", NULL);
+        char args[sizeof(int) * 3 + 2];
+        snprintf(args, sizeof(args), "%d", i);
+        new_process = b_execute("./bin/guide", args);
         if (new_process == -1) end_simulation();
         vector_push_back(processes, &new_process);
     }
@@ -94,7 +102,12 @@ void check_configuration()
 
 void init()
 {
-    signal(SIGINT, end_simulation);
+    struct sigaction sa;
+    sa.sa_handler = handle_kill;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    sigaction(SIGINT, &sa, NULL);
+
     zombie_thread = b_execute_thread(zombie_cleaner);
 
     srand(time(NULL));
@@ -123,8 +136,13 @@ void end_simulation()
     vector_free(shared_data->ferry_queue_clockwise);
     vector_free(shared_data->ferry_queue_aclockwise);
 
-    b_shm_remove(b_shm_get_id(SHM_GUIDES_DATA, sizeof(shared_data_t)));
+    b_shm_remove(b_shm_get_id(SHM_SHARED_DATA, sizeof(shared_data_t)));
+    b_shm_remove(b_shm_get_id(SHM_VISITOR_DATA, sizeof(visitor_data_t) * VISITORS_LIMIT));
+    b_shm_remove(b_shm_get_id(SHM_GUIDES_DATA, sizeof(guide_data_t) * GUIDES_NUMBER));
     b_shm_dettach(shared_data);
+
+    b_msq_remove(b_msq_get_id(MSG_CASHIER));
+    b_msq_remove(b_msq_get_id(MSG_GUIDES));
 
     while(processes->length > 0) {
         pid_t pid;

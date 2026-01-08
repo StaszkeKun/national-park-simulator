@@ -3,9 +3,9 @@
 #define TICKET_REGULAR_PATH "/tmp/regular_fifo"
 #define TICKET_VIP_PATH "/tmp/vip_fifo"
 
-#define SIG_LEAVE_TOWER SIGUSR1
+#define SIG_WAKE_UP SIGUSR1
 #define SIG_LEAVE_PARK SIGUSR2
-#define SIG_WAKE_UP SIGRTMIN
+#define SIG_LEAVE_TOWER SIGRTMIN
 
 typedef enum
 {
@@ -20,7 +20,7 @@ typedef enum
     VS_GOING_UP_TOWER,
     VS_AT_TOWER,
     VS_GOING_DOWN_TOWER,
-    VS_AT_RIVER_QUEUE,
+    VS_AT_FERRY_QUEUE,
     VS_AWAITING_FERRY_START,
     VS_AT_FERRY_VOYAGE,
     VS_LEAVING
@@ -34,9 +34,10 @@ typedef enum
     GS_AT_BRIDGE,
     GS_MOVING_TO_TOWER,
     GS_AT_TOWER,
-    GS_MOVING_TO_RIVER,
-    GS_AT_RIVER,
-    GS_MOVING_TO_CASH
+    GS_MOVING_TO_FERRY,
+    GS_AT_FERRY,
+    GS_MOVING_TO_CASH,
+    GS_AT_CASH
 } guide_status_t;
 
 enum SharedMemoryIds
@@ -51,7 +52,7 @@ enum SemaphoreIds
 {
     SEM_BRIDGE,
     SEM_TOWER,
-    SEM_RIVER,
+    SEM_FERRY,
     MUTEX_BRIDGE,
     MUTEX_FERRY
 };

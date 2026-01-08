@@ -40,17 +40,16 @@ typedef struct
 {
     pid_t pid;
     bool isVIP;
-    kid_data_t kids[KIDS_LIMIT];
+    kid_data_t* kids[KIDS_LIMIT];
     int kids_count;
-    bool hasKidsUnder6;
+    bool slowed;
     visitor_status_t status;
 } visitor_data_t;
 
 typedef struct
 {
     pid_t pid;
-    visitor_data_t* group[GROUP_SIZE];
+    visitor_data_t* groups[GROUP_SIZE];
     int group_count;
-    bool track;
     guide_status_t status;
 } guide_data_t;

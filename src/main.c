@@ -15,6 +15,7 @@ void end_simulation();
 pthread_t zombie_thread;
 void zombie_cleaner()
 {
+    b_sleep(1);
     while(true)
     {
         wait(NULL);
@@ -31,18 +32,20 @@ shared_data_t* shared_data;
 guide_data_t* guides_data;
 visitor_data_t* visitors_data;
 vector_t* processes;
+int semid;
 
 int main()
 {
     check_configuration();
     init();
-
     processes = vector_new(sizeof(pid_t));
 
     pid_t new_process;
+
     new_process = b_execute("./bin/cashier", NULL);
     if (new_process == -1) end_simulation();
     vector_push_back(processes, &new_process);
+
     for(int i = 0; i < GUIDES_NUMBER; i++)
     {
         char args[sizeof(int) * 3 + 2];
@@ -54,11 +57,11 @@ int main()
 
     while(true)
     {
-        b_sleep(b_randf(1, 5));
+        b_sleep(b_randf(VISITOR_SPAWN_MIN_INTERVAL, VISITOR_SPAWN_MAX_INTERVAL));
         new_process = b_execute("./bin/visitor", NULL);
         if (new_process == -1)
         {
-            printf("[ERROR]: visitor creation error");
+            perror("[ERROR]: visitor creation error");
             continue;
         }
         vector_push_back(processes, &new_process);
@@ -102,6 +105,9 @@ void check_configuration()
 
 void init()
 {
+    printf("ADD OPTION OF VERBOSE LOGGING\n");
+    printf("ENSURE JORUNEY TAKES LESS THAN CLOSING TIME (and overall better conditions)\n");
+    printf("ADD TMUX IF THERE IS ENOUGH TIME AND SANITY LEFT\n");
     struct sigaction sa;
     sa.sa_handler = handle_kill;
     sigemptyset(&sa.sa_mask);
@@ -111,7 +117,6 @@ void init()
     zombie_thread = b_execute_thread(zombie_cleaner);
 
     srand(time(NULL));
-
     shared_data = b_shm_attach(b_shm_get_id(SHM_SHARED_DATA, sizeof(shared_data_t)));
     shared_data->start_time = b_tick();
     shared_data->bridge_direction = true;
@@ -123,26 +128,24 @@ void init()
     shared_data->ferry_seats = FERRY_LIMIT;
     shared_data->ferry_queue_clockwise = vector_new(sizeof(guide_data_t));
     shared_data->ferry_queue_aclockwise = vector_new(sizeof(guide_data_t));
+
+    semid = b_sem_get_id();
+    b_sem_set(semid, SEM_BRIDGE, BRIDGE_LIMIT);
+    b_sem_set(semid, SEM_TOWER, TOWER_LIMIT);
+    b_sem_set(semid, SEM_FERRY, FERRY_LIMIT);
+    b_sem_set(semid, MUTEX_BRIDGE, 1);
+    b_sem_set(semid, MUTEX_FERRY, 1);
+    b_sem_set(semid, MUTEX_ALLOC_VISITOR, 1);
+    processes = vector_new(sizeof(pid_t));
 }
 
 void end_simulation()
 {
-    pthread_cancel(zombie_thread);
-    pthread_join(zombie_thread, NULL);
-
     vector_free(shared_data->bridge_queue_clockwise);
     vector_free(shared_data->bridge_queue_aclockwise);
     vector_free(shared_data->tower_queue);
     vector_free(shared_data->ferry_queue_clockwise);
     vector_free(shared_data->ferry_queue_aclockwise);
-
-    b_shm_remove(b_shm_get_id(SHM_SHARED_DATA, sizeof(shared_data_t)));
-    b_shm_remove(b_shm_get_id(SHM_VISITOR_DATA, sizeof(visitor_data_t) * VISITORS_LIMIT));
-    b_shm_remove(b_shm_get_id(SHM_GUIDES_DATA, sizeof(guide_data_t) * GUIDES_NUMBER));
-    b_shm_dettach(shared_data);
-
-    b_msq_remove(b_msq_get_id(MSG_CASHIER));
-    b_msq_remove(b_msq_get_id(MSG_GUIDES));
 
     while(processes->length > 0) {
         pid_t pid;
@@ -151,6 +154,19 @@ void end_simulation()
             b_signal(pid, SIGINT);
         }
     }
+
+    pthread_cancel(zombie_thread);
+    pthread_join(zombie_thread, NULL);
+
+    b_shm_dettach(shared_data);
+    b_shm_remove(b_shm_get_id(SHM_SHARED_DATA, sizeof(shared_data_t)));
+    b_shm_remove(b_shm_get_id(SHM_VISITOR_DATA, sizeof(visitor_data_t) * VISITORS_LIMIT));
+    b_shm_remove(b_shm_get_id(SHM_GUIDES_DATA, sizeof(guide_data_t) * GUIDES_NUMBER));
+
+    b_msq_remove(b_msq_get_id(MSG_CASHIER));
+    b_msq_remove(b_msq_get_id(MSG_GUIDES));
+
+    b_sem_remove(semid);
 
     vector_free(processes);
 

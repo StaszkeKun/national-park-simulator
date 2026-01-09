@@ -57,7 +57,7 @@ void b_signal(pid_t target, int signal)
     if(kill(target, signal) < 0)
     {
         char msg[50];
-        sprintf(msg, "[ERROR]: signal (%d) sending error", signal);
+        sprintf(msg, "[ERROR]: signal (%d) sending error to (%d)", signal, target);
         perror(msg);
     }
 }
@@ -87,14 +87,26 @@ bool b_process_exist(pid_t pid)
     return true;
 }
 
-void b_sleep(float time)
+void b_sleep(double time)
 {
+    if (time <= 0.0) return;
+
     struct timespec tv, rem;
     tv.tv_sec = (time_t)time;
     tv.tv_nsec = (long)((time - tv.tv_sec) * 1e9);
 
+    if (tv.tv_nsec >= 1000000000L) {
+        tv.tv_sec++;
+        tv.tv_nsec -= 1000000000L;
+    }
+
     while (nanosleep(&tv, &rem) == -1)
     {
+        if (errno != EINTR)
+        {
+            perror("[ERROR]: sleep error");
+            exit(EXIT_FAILURE);
+        }
         tv = rem;
     }
 }
@@ -124,6 +136,8 @@ int b_randi(int min, int max)
 
 visitor_data_t* b_get_visitor_by_pid(visitor_data_t* visitor_data_array, pid_t searched_pid)
 {
+    if(searched_pid == 0) return NULL;
+
     for (int i = 0; i < VISITORS_LIMIT; i++)
     {
         if (visitor_data_array[i].pid == searched_pid)
@@ -349,7 +363,6 @@ int b_fifo_open(char* path, int oflag)
 
 void b_fifo_close(int fd)
 {
-    printf("%d\n", fd);
     if (close(fd) < 0)
     {
         perror("[ERROR]: fd close error");

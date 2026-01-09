@@ -132,3 +132,21 @@ void vector_pop_front(vector_t* vec, void* out_element)
     memmove(vec->ptr, vec->ptr + vec->element_size, (vec->length - 1) * vec->element_size);
     _vector_set_length(vec, vec->length - 1);
 }
+
+void vector_remove(vector_t* vec, void* element)
+{
+    for (int i = 0; i < vec->length; i++)
+    {
+        void* curr = vec->ptr + i * vec->element_size;
+        if (memcmp(curr, element, vec->element_size) == 0)
+        {
+            size_t len = vec->length - i - 1;
+            if (len > 0)
+            {
+                memmove(curr, curr + vec->element_size, (vec->length - i - 1) * vec->element_size);
+            }
+            _vector_set_length(vec, vec->length - 1);
+            return;
+        }
+    }
+}

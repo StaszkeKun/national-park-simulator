@@ -62,6 +62,8 @@ void init()
     sa.sa_flags = 0;
     sigaction(SIGINT, &sa, NULL);
 
+    srand(getpid() * time(NULL));
+
     msgid_cashier = b_msq_get_id(MSG_CASHIER);
     msgid_guide = b_msq_get_id(MSG_GUIDES);
 
@@ -90,32 +92,51 @@ void operate()
             visitors_in_group = 0;
             while(true)
             {
-                long visitor_pid = b_msq_receive(msgid_cashier, 1);
-                visitor_data_t* visitor_data = b_get_visitor_by_pid(visitors_data, visitor_pid);
-                if (visitors_in_group + visitor_data->kids_count + 1 <= GROUP_SIZE)
+                long visitor_pid = b_msq_receive_nowait(msgid_cashier, 1);
+
+                if(visitor_pid != -1)
                 {
-                    my_data->groups[my_data->group_count] = visitor_data;
-                    my_data->group_count++;
-                    visitors_in_group += visitor_data->kids_count + 1;
-                    update_time = b_tick();
+                    visitor_data_t* visitor_data = b_get_visitor_by_pid(visitors_data, visitor_pid);
+                    if (visitors_in_group + visitor_data->kids_count + 1 <= GROUP_SIZE)
+                    {
+                        my_data->groups[my_data->group_count] = visitor_data;
+                        my_data->group_count++;
+                        visitors_in_group += visitor_data->kids_count + 1;
+                        visitor_data->status = VS_FOLLOWING_GUIDE;
+                        b_signal(visitor_pid, SIG_WAKE_UP);
+                        update_time = b_tick();
+                        printf("[GUIDE %d] took %ld to group - departing in %dsec if no more visitors\n", my_id, visitor_pid, GUIDES_GATHER_WAIT);
+                    }
+                    else
+                    {
+                        b_msq_send(msgid_cashier, 1, visitor_pid);
+                        printf("[GUIDE %d] %ld did't fit group - sending to queue\n", my_id, visitor_pid);
+                    }
+                }
+
+                //printf("g%d: 1\n", my_id);
+                if (visitors_in_group >= GROUP_SIZE) break;
+                //printf("g%d: 2\n", my_id);
+                if (visitors_in_group > 0 && b_get_time_of_day(shared_data->start_time) > OPEN_TIME) break;
+                //printf("g%d: 3\n", my_id);
+                if (visitors_in_group > 0 && b_tick() - update_time > GUIDES_GATHER_WAIT) break;
+
+                double now = b_get_time_of_day(shared_data->start_time);
+                if (now > OPEN_TIME)
+                {
+                    b_sleep(CYCLE_TIME - now);
                 }
                 else
                 {
-                    b_msq_send(msgid_cashier, 1, visitor_pid);
-                }
-
-                if (visitors_in_group >= GROUP_SIZE || (visitors_in_group > 0 && b_tick() - update_time > GUIDES_GATHER_WAIT))
-                {
-                    int random = b_randi(0, 100);
-                    if (random < 50) clockwise_track = false;
-                    else clockwise_track = true;
-
-                    if (clockwise_track) my_data->status = GS_MOVING_TO_BRIDGE;
-                    else my_data->status = GS_MOVING_TO_FERRY;
-
-                    break;
+                    b_sleep(GUIDES_GATHER_CHECK_INTERVAL);
                 }
             }
+
+            int random = b_randi(0, 100);
+            clockwise_track = random < 50 ? true : false;
+            my_data->status = clockwise_track ? GS_MOVING_TO_BRIDGE : GS_MOVING_TO_FERRY;
+
+            printf("[GUIDE %d] finished gathering group: %d\n", my_id, visitors_in_group);
             break;
         }
         case GS_MOVING_TO_BRIDGE:
@@ -123,6 +144,7 @@ void operate()
         case GS_MOVING_TO_FERRY:
         case GS_MOVING_TO_TOWER:
         {
+            printf("[GUIDE %d] moving\n", my_id);
             bool group_slowed = false;
             for(int i = 0; i < my_data->group_count; i++)
             {
@@ -140,6 +162,7 @@ void operate()
             b_sleep(move_time);
 
             my_data->status = GS_AT_CASH;
+            printf("[GUIDE %d] finished moving\n", my_id);
             break;
         }
         //DEBUG SEPARATE LATER
@@ -152,15 +175,16 @@ void operate()
         }
         case GS_AT_CASH:
         {
+            printf("[GUIDE %d] arrived at cashier\n", my_id);
             for(int i = 0; i < my_data->group_count; i++)
             {
                 b_msq_send(msgid_cashier, 2, my_data->groups[i]->pid);
             }
-
+            printf("[GUIDE %d] finished leaving report\n", my_id);
             //clean up for next tour
             my_data->group_count = 0;
-            memset(my_data->groups, 0, sizeof(my_data->groups));
             my_data->status = GS_GATHERING_GROUP;
+            b_signal(shared_data->cashier_pid, SIG_WAKE_UP);
 
             break;
         }

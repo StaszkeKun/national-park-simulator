@@ -13,6 +13,7 @@ typedef struct
 {
     //general
     double start_time;
+    pid_t cashier_pid;
 
     //bridge managing
     bool bridge_direction; //true (K=>A=>B) //false(B=>A=>K)
@@ -40,7 +41,7 @@ typedef struct
 {
     pid_t pid;
     bool isVIP;
-    kid_data_t* kids[KIDS_LIMIT];
+    kid_data_t kids[KIDS_LIMIT];
     int kids_count;
     bool slowed;
     visitor_status_t status;

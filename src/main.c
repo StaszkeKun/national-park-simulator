@@ -12,13 +12,26 @@ void check_configuration();
 void init();
 void end_simulation();
 
+shared_data_t* shared_data;
+guide_data_t* guides_data;
+visitor_data_t* visitors_data;
+vector_t* processes;
+int semid;
+
+pthread_mutex_t processes_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_t zombie_thread;
 void zombie_cleaner()
 {
     b_sleep(1);
     while(true)
     {
-        wait(NULL);
+        pid_t pid = wait(NULL);
+        if(pid != -1)
+        {
+            pthread_mutex_lock(&processes_mutex);
+            vector_remove(processes, &pid);
+            pthread_mutex_unlock(&processes_mutex);
+        }
     }
 }
 
@@ -28,11 +41,6 @@ void handle_kill(int sig)
     end_simulation();
 }
 
-shared_data_t* shared_data;
-guide_data_t* guides_data;
-visitor_data_t* visitors_data;
-vector_t* processes;
-int semid;
 
 int main()
 {
@@ -44,7 +52,10 @@ int main()
 
     new_process = b_execute("./bin/cashier", NULL);
     if (new_process == -1) end_simulation();
+
+    pthread_mutex_lock(&processes_mutex);
     vector_push_back(processes, &new_process);
+    pthread_mutex_unlock(&processes_mutex);
 
     for(int i = 0; i < GUIDES_NUMBER; i++)
     {
@@ -52,7 +63,10 @@ int main()
         snprintf(args, sizeof(args), "%d", i);
         new_process = b_execute("./bin/guide", args);
         if (new_process == -1) end_simulation();
+
+        pthread_mutex_lock(&processes_mutex);
         vector_push_back(processes, &new_process);
+        pthread_mutex_unlock(&processes_mutex);
     }
 
     while(true)
@@ -64,7 +78,10 @@ int main()
             perror("[ERROR]: visitor creation error");
             continue;
         }
+
+        pthread_mutex_lock(&processes_mutex);
         vector_push_back(processes, &new_process);
+        pthread_mutex_unlock(&processes_mutex);
     }
 
     end_simulation();
@@ -107,7 +124,6 @@ void init()
 {
     printf("ADD OPTION OF VERBOSE LOGGING\n");
     printf("ENSURE JORUNEY TAKES LESS THAN CLOSING TIME (and overall better conditions)\n");
-    printf("ADD TMUX IF THERE IS ENOUGH TIME AND SANITY LEFT\n");
     struct sigaction sa;
     sa.sa_handler = handle_kill;
     sigemptyset(&sa.sa_mask);

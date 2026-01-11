@@ -324,6 +324,35 @@ void operate()
             break;
         }
         case GS_AT_TOWER:
+        {
+            printf("[GUIDE %d]: arrived at tower\n", my_id);
+            for(int i = 0; i < my_data->group_count; i++)
+            {
+                my_data->groups[i]->status = VS_AT_TOWER_QUEUE;
+                b_signal(my_data->groups[i]->pid, SIG_WAKE_UP);
+            }
+
+            visitors_checkins = 0;
+
+            while(visitors_checkins < visitors_in_group)
+            {
+                long msg = b_msq_receive(msgid_guide, my_id+1);
+                visitors_checkins += msg;
+                printf("[GUIDE %d]: waiting fo group to sightsee tower %d/%d\n", my_id, visitors_checkins, visitors_in_group);
+            }
+            printf("[GUIDE %d]: left tower\n", my_id);
+
+            if (clockwise_track)
+            {
+                my_data->status = GS_MOVING_TO_FERRY;
+            }
+            else
+            {
+                my_data->status = GS_MOVING_TO_BRIDGE;
+            }
+
+            break;
+        }
         case GS_AT_FERRY:
         {
             my_data->status = GS_AT_CASH;

@@ -8,6 +8,7 @@ void end_simulation();
 void operate();
 int register_visitor();
 void create_visitor();
+bool check_if_first_secure(void* buf, int mutex);
 
 void handle_wake_up(int sig)
 {
@@ -159,11 +160,11 @@ void operate()
         }
         case VS_AT_BRIDGE:
         {
-            b_sem_p(semid, SEM_BRIDGE, 1);
+            b_sem_p(semid, SEM_BRIDGE, 1 + my_data->kids_count);
 
             b_sleep(shared_data->bridge_crosstime);
 
-            b_sem_v(semid, SEM_BRIDGE, 1);
+            b_sem_v(semid, SEM_BRIDGE, 1 + my_data->kids_count);
 
             b_msq_send(msgid_guide, my_data->asigned_guide + 1, my_data->kids_count + 1);
 
@@ -171,9 +172,73 @@ void operate()
             break;
         }
         case VS_AT_TOWER_QUEUE:
+        {
+            if (!my_data->tower_allowed)
+            {
+                b_msq_send(msgid_guide, my_data->asigned_guide + 1, 1 + my_data->kids_count);
+
+                my_data->status = VS_FOLLOWING_GUIDE;
+
+                break;
+            }
+
+            b_sem_p(semid, MUTEX_TOWER, 1);
+
+            ringbuffer_push_back(&shared_data->tower_queue, my_data->pid);
+            b_sem_v(semid, MUTEX_TOWER, 1);
+
+            while(!check_if_first_secure(&shared_data->tower_queue, MUTEX_TOWER))
+            {
+                b_wait_for_wakeup();
+            }
+
+            b_sem_p(semid, MUTEX_TOWER, 1);
+
+            ringbuffer_pop_front(&shared_data->tower_queue, NULL);
+
+            if (shared_data->tower_queue.count > 0)
+            {
+                pid_t new_first;
+                ringbuffer_at(&shared_data->tower_queue, 0, &new_first);
+                b_signal(new_first, SIG_WAKE_UP);
+            }
+
+            b_sem_v(semid, MUTEX_TOWER, 1);
+
+            my_data->status = VS_GOING_UP_TOWER;
+
+            break;
+        }
         case VS_GOING_UP_TOWER:
+        {
+            b_sem_p(semid, SEM_TOWER, 1 + my_data->kids_count);
+
+            b_sleep(shared_data->tower_uptime);
+
+            my_data->status = VS_AT_TOWER;
+
+            break;
+        }
         case VS_AT_TOWER:
+        {
+            b_sleep(shared_data->tower_seetime);
+
+            my_data->status = VS_GOING_DOWN_TOWER;
+
+            break;
+        }
         case VS_GOING_DOWN_TOWER:
+        {
+            b_sleep(shared_data->tower_downtime);
+
+            b_sem_v(semid, SEM_TOWER, 1 + my_data->kids_count);
+
+            b_msq_send(msgid_guide, my_data->asigned_guide + 1, 1 + my_data->kids_count);
+
+            my_data->status = VS_FOLLOWING_GUIDE;
+
+            break;
+        }
         case VS_AT_FERRY_QUEUE:
         case VS_AWAITING_FERRY_START:
         case VS_AT_FERRY_VOYAGE:
@@ -235,6 +300,7 @@ void create_visitor()
     my_data->kids_count = 0;
     my_data->asigned_guide = -1;
     my_data->slowed = false;
+    my_data->tower_allowed = true;
     my_data->isVIP = false;
 
     if (b_randf(0, 1) <= VIP_CHANCE)
@@ -250,9 +316,26 @@ void create_visitor()
             int age = b_randi(1, 15);
             my_data->kids[my_data->kids_count].age = age;
             if (age < 12) my_data->slowed = true;
+            if (age < 6) my_data->tower_allowed = false;
             my_data->kids_count++;
         }
     }
 
     my_data->status = VS_NONE;
+}
+
+bool check_if_first_secure(void* buf, int mutex)
+{
+    b_sem_p(semid, mutex, 1);
+
+    pid_t first_element;
+    ringbuffer_at(buf, 0, &first_element);
+    if (first_element == my_data->pid)
+    {
+        b_sem_v(semid, mutex, 1);
+        return true;
+    }
+
+    b_sem_v(semid, mutex, 1);
+    return false;
 }

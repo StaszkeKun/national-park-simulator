@@ -17,6 +17,7 @@ guide_data_t* guides_data;
 visitor_data_t* visitors_data;
 vector_t* processes;
 int semid;
+pid_t new_process;
 
 pthread_mutex_t processes_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_t zombie_thread;
@@ -41,14 +42,10 @@ void handle_kill(int sig)
     end_simulation();
 }
 
-
 int main()
 {
     check_configuration();
     init();
-    processes = vector_new(sizeof(pid_t));
-
-    pid_t new_process;
 
     new_process = b_execute("./bin/cashier", NULL);
     if (new_process == -1) end_simulation();
@@ -126,6 +123,9 @@ void init()
     printf("ADD OPTION OF VERBOSE LOGGING\n");
     printf("ENSURE JORUNEY TAKES LESS THAN CLOSING TIME (and overall better conditions)\n");
     printf("ADD VIP BEHAVIOUR\n");
+    printf("FERRY BEHAVIOUR\n");
+    printf("ENSURE CORRECT GUIDE PATHING\n");
+    printf("ADD SIGNAL1/2 FUNCTIONALITY\n");
     struct sigaction sa;
     sa.sa_handler = handle_kill;
     sigemptyset(&sa.sa_mask);
@@ -152,6 +152,9 @@ void init()
     shared_data->tower_queue.count = 0;
     shared_data->tower_queue.head_idx = 0;
     shared_data->tower_queue.tail_idx = 0;
+    shared_data->tower_uptime = b_randf(TOWER_ACTION_MIN_TIME, TOWER_ACTION_MAX_TIME);
+    shared_data->tower_seetime = b_randf(TOWER_ACTION_MIN_TIME, TOWER_ACTION_MAX_TIME);
+    shared_data->tower_downtime = b_randf(TOWER_ACTION_MIN_TIME, TOWER_ACTION_MAX_TIME);
     shared_data->ferry_side = true;
     shared_data->ferry_seats = FERRY_LIMIT;
     shared_data->ferry_queue_clockwise.capacity = VISITORS_LIMIT;
@@ -168,6 +171,7 @@ void init()
     b_sem_set(semid, SEM_TOWER, TOWER_LIMIT);
     b_sem_set(semid, SEM_FERRY, FERRY_LIMIT);
     b_sem_set(semid, MUTEX_BRIDGE, 1);
+    b_sem_set(semid, MUTEX_TOWER, 1);
     b_sem_set(semid, MUTEX_FERRY, 1);
     b_sem_set(semid, MUTEX_ALLOC_VISITOR, 1);
     processes = vector_new(sizeof(pid_t));
@@ -175,6 +179,11 @@ void init()
 
 void end_simulation()
 {
+    if (b_process_exist(new_process))
+    {
+        b_signal(new_process, SIGINT);
+    }
+
     while(processes->length > 0) {
         pid_t pid;
         vector_pop_back(processes, &pid);

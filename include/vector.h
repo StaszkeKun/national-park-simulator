@@ -44,7 +44,6 @@ vector_t* vector_new(size_t element_size)
 
 void vector_free(vector_t* vec)
 {
-    printf("freed\n");
     free(vec->ptr);
     free(vec);
 }

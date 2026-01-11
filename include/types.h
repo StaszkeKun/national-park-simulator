@@ -19,18 +19,21 @@ typedef struct
     bool bridge_direction; //true (K=>A=>B) //false(B=>A=>K)
     int groups_on_bridge;
     float bridge_crosstime;
-    
+    ringbuffer_t bridge_queue_clockwise;
+    ringbuffer_t bridge_queue_aclockwise;
+
     //tower managing
-    
+    ringbuffer_t tower_queue;
+    float tower_uptime;
+    float tower_seetime;
+    float tower_downtime;
+
     //ferry managing
     bool ferry_side; //true (B side) //false (K side)
     int ferry_seats;
-    
-    ringbuffer_t bridge_queue_clockwise;
-    ringbuffer_t bridge_queue_aclockwise;
-    ringbuffer_t tower_queue;
     ringbuffer_t ferry_queue_clockwise;
     ringbuffer_t ferry_queue_aclockwise;
+
 } shared_data_t;
 
 typedef struct
@@ -47,6 +50,7 @@ typedef struct
     int kids_count;
     int asigned_guide;
     bool slowed;
+    bool tower_allowed;
     visitor_status_t status;
 } visitor_data_t;
 

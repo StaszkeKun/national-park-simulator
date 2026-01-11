@@ -47,13 +47,14 @@ enum SharedMemoryIds
     SHM_VISITOR_DATA
 };
 
-#define NSEMS 6
+#define NSEMS 7
 enum SemaphoreIds
 {
     SEM_BRIDGE,
     SEM_TOWER,
     SEM_FERRY,
     MUTEX_BRIDGE,
+    MUTEX_TOWER,
     MUTEX_FERRY,
     MUTEX_ALLOC_VISITOR
 };

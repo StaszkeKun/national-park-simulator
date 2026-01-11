@@ -6,7 +6,7 @@
 #include <stdbool.h>
 #include <math.h>
 #include "config.h"
-#include "vector.h"
+#include "ringbuffer.h"
 #include "constants.h"
 
 typedef struct
@@ -18,17 +18,19 @@ typedef struct
     //bridge managing
     bool bridge_direction; //true (K=>A=>B) //false(B=>A=>K)
     int groups_on_bridge;
-    vector_t* bridge_queue_clockwise;
-    vector_t* bridge_queue_aclockwise;
-
+    float bridge_crosstime;
+    
     //tower managing
-    vector_t* tower_queue;
-
+    
     //ferry managing
     bool ferry_side; //true (B side) //false (K side)
     int ferry_seats;
-    vector_t* ferry_queue_clockwise;
-    vector_t* ferry_queue_aclockwise;
+    
+    ringbuffer_t bridge_queue_clockwise;
+    ringbuffer_t bridge_queue_aclockwise;
+    ringbuffer_t tower_queue;
+    ringbuffer_t ferry_queue_clockwise;
+    ringbuffer_t ferry_queue_aclockwise;
 } shared_data_t;
 
 typedef struct
@@ -43,6 +45,7 @@ typedef struct
     bool isVIP;
     kid_data_t kids[KIDS_LIMIT];
     int kids_count;
+    int asigned_guide;
     bool slowed;
     visitor_status_t status;
 } visitor_data_t;

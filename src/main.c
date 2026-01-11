@@ -122,8 +122,10 @@ void check_configuration()
 
 void init()
 {
+    printf("YOU CAN'T REALLOC IN SHARED MEMORY\n");
     printf("ADD OPTION OF VERBOSE LOGGING\n");
     printf("ENSURE JORUNEY TAKES LESS THAN CLOSING TIME (and overall better conditions)\n");
+    printf("ADD VIP BEHAVIOUR\n");
     struct sigaction sa;
     sa.sa_handler = handle_kill;
     sigemptyset(&sa.sa_mask);
@@ -137,13 +139,29 @@ void init()
     shared_data->start_time = b_tick();
     shared_data->bridge_direction = true;
     shared_data->groups_on_bridge = 0;
-    shared_data->bridge_queue_clockwise = vector_new(sizeof(guide_data_t));
-    shared_data->bridge_queue_aclockwise = vector_new(sizeof(guide_data_t));
-    shared_data->tower_queue = vector_new(sizeof(visitor_data_t));
+    shared_data->bridge_queue_clockwise.capacity = VISITORS_LIMIT;
+    shared_data->bridge_queue_clockwise.count = 0;
+    shared_data->bridge_queue_clockwise.head_idx = 0;
+    shared_data->bridge_queue_clockwise.tail_idx = 0;
+    shared_data->bridge_queue_aclockwise.capacity = VISITORS_LIMIT;
+    shared_data->bridge_queue_aclockwise.count = 0;
+    shared_data->bridge_queue_aclockwise.head_idx = 0;
+    shared_data->bridge_queue_aclockwise.tail_idx = 0;
+    shared_data->bridge_crosstime = b_randf(BRIDGE_CROSS_MIN_TIME, BRIDGE_CROSS_MAX_TIME);
+    shared_data->tower_queue.capacity = VISITORS_LIMIT;
+    shared_data->tower_queue.count = 0;
+    shared_data->tower_queue.head_idx = 0;
+    shared_data->tower_queue.tail_idx = 0;
     shared_data->ferry_side = true;
     shared_data->ferry_seats = FERRY_LIMIT;
-    shared_data->ferry_queue_clockwise = vector_new(sizeof(guide_data_t));
-    shared_data->ferry_queue_aclockwise = vector_new(sizeof(guide_data_t));
+    shared_data->ferry_queue_clockwise.capacity = VISITORS_LIMIT;
+    shared_data->ferry_queue_clockwise.count = 0;
+    shared_data->ferry_queue_clockwise.head_idx = 0;
+    shared_data->ferry_queue_clockwise.tail_idx = 0;
+    shared_data->ferry_queue_aclockwise.capacity = VISITORS_LIMIT;
+    shared_data->ferry_queue_aclockwise.count = 0;
+    shared_data->ferry_queue_aclockwise.head_idx = 0;
+    shared_data->ferry_queue_aclockwise.tail_idx = 0;
 
     semid = b_sem_get_id();
     b_sem_set(semid, SEM_BRIDGE, BRIDGE_LIMIT);
@@ -157,12 +175,6 @@ void init()
 
 void end_simulation()
 {
-    vector_free(shared_data->bridge_queue_clockwise);
-    vector_free(shared_data->bridge_queue_aclockwise);
-    vector_free(shared_data->tower_queue);
-    vector_free(shared_data->ferry_queue_clockwise);
-    vector_free(shared_data->ferry_queue_aclockwise);
-
     while(processes->length > 0) {
         pid_t pid;
         vector_pop_back(processes, &pid);

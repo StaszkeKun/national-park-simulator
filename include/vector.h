@@ -13,8 +13,8 @@
 
 typedef struct {
     size_t element_size;
-    int capacity;
-    int length;
+    size_t capacity;
+    size_t length;
     void* ptr;
 } vector_t;
 
@@ -44,11 +44,12 @@ vector_t* vector_new(size_t element_size)
 
 void vector_free(vector_t* vec)
 {
+    printf("freed\n");
     free(vec->ptr);
     free(vec);
 }
 
-void _vector_reallocate(vector_t* vec, int new_capacity)
+void _vector_reallocate(vector_t* vec, size_t new_capacity)
 {
     void* temp = realloc(vec->ptr, vec->element_size * new_capacity);
     if(temp == NULL)
@@ -62,7 +63,7 @@ void _vector_reallocate(vector_t* vec, int new_capacity)
     vec->capacity = new_capacity;
 }
 
-void _vector_set_length(vector_t* vec, int new_length)
+void _vector_set_length(vector_t* vec, size_t new_length)
 {
     vec->length = new_length;
 
@@ -76,7 +77,7 @@ void _vector_set_length(vector_t* vec, int new_length)
     }
 }
 
-void vector_at(vector_t* vec, unsigned int pos, void* out_element)
+void vector_at(vector_t* vec, size_t pos, void* out_element)
 {
     if (pos >= vec->length) {
         printf("[ERROR]: ATTEMPTING TO ACCESS VECTOR OUT OF BOUNDS\n");
@@ -93,18 +94,16 @@ void vector_push_back(vector_t* vec, void* new_element)
 
 void vector_pop_back(vector_t* vec, void* out_element)
 {
-    if (out_element == NULL)
-    {
-        printf("[ERROR]: attempting to pop to NULL pointer\n");
-        return;
-    }
-
     if (vec->length == 0)
     {
         printf("[ERROR]: attempting to pop an empty vector\n");
         return;
     }
-    memcpy(out_element, vec->ptr + (vec->length - 1) * vec->element_size, vec->element_size);
+
+    if (out_element != NULL)
+    {
+        memcpy(out_element, vec->ptr + (vec->length - 1) * vec->element_size, vec->element_size);
+    }
     _vector_set_length(vec, vec->length - 1);
 }
 
@@ -117,18 +116,16 @@ void vector_push_front(vector_t* vec, void* new_element)
 
 void vector_pop_front(vector_t* vec, void* out_element)
 {
-    if (out_element == NULL)
-    {
-        printf("[ERROR]: attempting to pop to NULL pointer\n");
-        return;
-    }
-
     if (vec->length == 0)
     {
         printf("[ERROR]: attempting to pop an empty vector\n");
         return;
     }
-    memcpy(out_element, vec->ptr, vec->element_size);
+
+    if (out_element != NULL)
+    {
+        memcpy(out_element, vec->ptr, vec->element_size);
+    }
     memmove(vec->ptr, vec->ptr + vec->element_size, (vec->length - 1) * vec->element_size);
     _vector_set_length(vec, vec->length - 1);
 }

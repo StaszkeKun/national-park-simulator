@@ -31,7 +31,9 @@ void kid_thread()
 int semid;
 int myid;
 int msgid_cashier;
+int msgid_guide;
 
+shared_data_t* shared_data;
 visitor_data_t* visitors_data;
 visitor_data_t* my_data = NULL;
 
@@ -71,12 +73,14 @@ void init()
 
     srand(getpid() * time(NULL));
 
+    shared_data = b_shm_attach(b_shm_get_id(SHM_SHARED_DATA, sizeof(shared_data_t)));
     visitors_data = b_shm_attach(b_shm_get_id(SHM_VISITOR_DATA, sizeof(visitor_data_t) * VISITORS_LIMIT));
 
     fifo_regular = b_fifo_open(TICKET_REGULAR_PATH, O_WRONLY);
     fifo_vip = b_fifo_open(TICKET_VIP_PATH, O_WRONLY);
 
     msgid_cashier = b_msq_get_id(MSG_CASHIER);
+    msgid_guide = b_msq_get_id(MSG_GUIDES);
 
     semid = b_sem_get_id();
     myid = register_visitor();
@@ -134,6 +138,7 @@ void operate()
         }
         case VS_AWAITING_TICKET:
         case VS_AWAITING_START:
+        case VS_AT_BRIDGE_QUEUE:
         {
             b_wait_for_wakeup();
             break;
@@ -152,8 +157,19 @@ void operate()
             }
             break;
         }
-        case VS_AT_BRIDGE_QUEUE:
         case VS_AT_BRIDGE:
+        {
+            b_sem_p(semid, SEM_BRIDGE, 1);
+
+            b_sleep(shared_data->bridge_crosstime);
+
+            b_sem_v(semid, SEM_BRIDGE, 1);
+
+            b_msq_send(msgid_guide, my_data->asigned_guide + 1, my_data->kids_count + 1);
+
+            my_data->status = VS_FOLLOWING_GUIDE;
+            break;
+        }
         case VS_AT_TOWER_QUEUE:
         case VS_GOING_UP_TOWER:
         case VS_AT_TOWER:
@@ -217,6 +233,7 @@ void create_visitor()
 {
     my_data->pid = getpid();
     my_data->kids_count = 0;
+    my_data->asigned_guide = -1;
     my_data->slowed = false;
     my_data->isVIP = false;
 

@@ -78,7 +78,8 @@ void _vector_set_length(vector_t* vec, size_t new_length)
 
 void vector_at(vector_t* vec, size_t pos, void* out_element)
 {
-    if (pos >= vec->length) {
+    if (pos >= vec->length)
+    {
         printf("[ERROR]: ATTEMPTING TO ACCESS VECTOR OUT OF BOUNDS\n");
         return;
     }

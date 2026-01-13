@@ -24,7 +24,7 @@ unsigned int gold_today = 0;
 bool setup_today = false;
 unsigned int day = 0;
 
-pthread_t leaving_thread;
+pthread_t leaving_thread = 0;
 void print_leaving()
 {
     visitor_data_t* visitor_data;
@@ -158,8 +158,11 @@ void init()
 
 void end_simulation()
 {
-    pthread_cancel(leaving_thread);
-    pthread_join(leaving_thread, NULL);
+    if (leaving_thread)
+    {
+        pthread_cancel(leaving_thread);
+        pthread_join(leaving_thread, NULL);
+    }
 
     b_shm_dettach(shared_data);
     b_shm_dettach(visitors_data);
@@ -176,7 +179,8 @@ void end_simulation()
 bool wait_for_visitor()
 {
     int ret = poll(fds, 2, -1);
-    if (ret == -1) {
+    if (ret == -1)
+    {
         if (errno == EINTR)
         {
             return false;

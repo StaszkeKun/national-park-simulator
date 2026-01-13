@@ -23,7 +23,7 @@ void handle_kill(int sig)
 
 void kid_thread()
 {
-    while(1)
+    while(true)
     {
         pause();
     }

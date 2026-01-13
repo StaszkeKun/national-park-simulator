@@ -50,7 +50,8 @@ void ringbuffer_at(ringbuffer_t* buf, size_t pos, pid_t* out_element)
         return;
     }
 
-    if (pos >= buf->count) {
+    if (pos >= buf->count)
+    {
         return;
     }
 

@@ -2,7 +2,6 @@
 #include <stdlib.h>
 #include <errno.h>
 #include "config.h"
-#include "vector.h"
 #include "types.h"
 #include "constants.h"
 #include "utils.h"
@@ -15,24 +14,21 @@ void end_simulation();
 shared_data_t* shared_data;
 guide_data_t* guides_data;
 visitor_data_t* visitors_data;
-vector_t* processes;
 int semid;
 pid_t new_process;
 
-pthread_mutex_t processes_mutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_t zombie_thread;
+volatile sig_atomic_t end = 0;
+pthread_t zombie_thread = 0;
 void zombie_cleaner()
 {
-    b_sleep(1);
-    while(true)
+    while(!end)
     {
-        pid_t pid = wait(NULL);
-        if(pid != -1)
-        {
-            pthread_mutex_lock(&processes_mutex);
-            vector_remove(processes, &pid);
-            pthread_mutex_unlock(&processes_mutex);
-        }
+        wait(NULL);
+    }
+
+    while(errno != ECHILD)
+    {
+        wait(NULL);
     }
 }
 
@@ -50,9 +46,7 @@ int main()
     new_process = b_execute("./bin/cashier", NULL);
     if (new_process == -1) end_simulation();
 
-    pthread_mutex_lock(&processes_mutex);
-    vector_push_back(processes, &new_process);
-    pthread_mutex_unlock(&processes_mutex);
+    zombie_thread = b_execute_thread(zombie_cleaner); //starts thread here because there is at least one child now, this avoids CPU burn
 
     for(int i = 0; i < GUIDES_NUMBER; i++)
     {
@@ -60,10 +54,6 @@ int main()
         snprintf(args, sizeof(args), "%d", i);
         new_process = b_execute("./bin/guide", args);
         if (new_process == -1) end_simulation();
-
-        pthread_mutex_lock(&processes_mutex);
-        vector_push_back(processes, &new_process);
-        pthread_mutex_unlock(&processes_mutex);
     }
 
     while(true)
@@ -75,10 +65,6 @@ int main()
             perror("[ERROR]: visitor creation error");
             continue;
         }
-
-        pthread_mutex_lock(&processes_mutex);
-        vector_push_back(processes, &new_process);
-        pthread_mutex_unlock(&processes_mutex);
     }
 
     end_simulation();
@@ -126,13 +112,14 @@ void init()
     printf("FERRY BEHAVIOUR\n");
     printf("ENSURE CORRECT GUIDE PATHING\n");
     printf("ADD SIGNAL1/2 FUNCTIONALITY\n");
+    printf("ADD KILL SAFEGUARD (using pid group)\n");
     struct sigaction sa;
     sa.sa_handler = handle_kill;
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = 0;
     sigaction(SIGINT, &sa, NULL);
 
-    zombie_thread = b_execute_thread(zombie_cleaner);
+    setpgid(0, 0);
 
     srand(time(NULL));
     shared_data = b_shm_attach(b_shm_get_id(SHM_SHARED_DATA, sizeof(shared_data_t)));
@@ -174,26 +161,20 @@ void init()
     b_sem_set(semid, MUTEX_TOWER, 1);
     b_sem_set(semid, MUTEX_FERRY, 1);
     b_sem_set(semid, MUTEX_ALLOC_VISITOR, 1);
-    processes = vector_new(sizeof(pid_t));
 }
 
 void end_simulation()
 {
-    if (b_process_exist(new_process))
+    if (!end)
     {
-        b_signal(new_process, SIGINT);
+        end = 1;
+        b_signal(-getpgrp(), SIGINT);
     }
 
-    while(processes->length > 0) {
-        pid_t pid;
-        vector_pop_back(processes, &pid);
-        if (b_process_exist(pid)) {
-            b_signal(pid, SIGINT);
-        }
+    if (zombie_thread)
+    {
+        pthread_join(zombie_thread, NULL);
     }
-
-    pthread_cancel(zombie_thread);
-    pthread_join(zombie_thread, NULL);
 
     b_shm_dettach(shared_data);
     b_shm_remove(b_shm_get_id(SHM_SHARED_DATA, sizeof(shared_data_t)));
@@ -204,8 +185,6 @@ void end_simulation()
     b_msq_remove(b_msq_get_id(MSG_GUIDES));
 
     b_sem_remove(semid);
-
-    vector_free(processes);
 
     exit(EXIT_SUCCESS);
 }

@@ -15,7 +15,8 @@
 
 #define CREATE_NEW IPC_CREAT|0600
 
-key_t _get_key(int id) {
+key_t _get_key(int id)
+{
     return ftok(".", id);
 }
 
@@ -95,7 +96,8 @@ void b_sleep(double time)
     tv.tv_sec = (time_t)time;
     tv.tv_nsec = (long)((time - tv.tv_sec) * 1e9);
 
-    if (tv.tv_nsec >= 1000000000L) {
+    if (tv.tv_nsec >= 1000000000L)
+    {
         tv.tv_sec++;
         tv.tv_nsec -= 1000000000L;
     }
@@ -162,7 +164,9 @@ int b_shm_get_id(int id, size_t size)
 
 void b_shm_remove(int shmid)
 {
-    if(shmctl(shmid, IPC_RMID, NULL) == -1) {
+    if (shmctl(shmid, IPC_RMID, NULL) == -1)
+    {
+        if (errno == EINVAL) return;
         perror("[ERROR]: Shared memory remove error");
     }
 }
@@ -221,6 +225,7 @@ void b_sem_remove(int semid)
 {
     if (semctl(semid, 0, IPC_RMID) < 0)
     {
+        if (errno == EINVAL) return;
         perror("[ERROR]: Semaphore remove error");
     }
 }
@@ -322,6 +327,7 @@ void b_msq_remove(int msqid)
 {
     if (msgctl(msqid, IPC_RMID, NULL) == -1)
     {
+        if (errno == EINVAL) return;
         perror("[ERROR]: message queue remove error");
         exit(EXIT_FAILURE);
     }

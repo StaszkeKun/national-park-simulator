@@ -38,6 +38,33 @@ void handle_kill(int sig)
     end_simulation();
 }
 
+volatile sig_atomic_t stop_handled = 0;
+void handle_stop(int sig)
+{
+    (void)sig;
+    if (stop_handled) return;
+
+    stop_handled = 1;
+
+    b_signal(-getpgrp(), SIGSTOP);
+
+    stop_handled = 0;
+    pause();
+}
+
+volatile sig_atomic_t cont_handled = 0;
+void handle_continue(int sig)
+{
+    (void)sig;
+    if (cont_handled) return;
+
+    cont_handled = 1;
+
+    b_signal(-getpgrp(), SIGCONT);
+
+    cont_handled = 0;
+}
+
 int main()
 {
     check_configuration();
@@ -105,19 +132,28 @@ void check_configuration()
 
 void init()
 {
-    printf("YOU CAN'T REALLOC IN SHARED MEMORY\n");
-    printf("ADD OPTION OF VERBOSE LOGGING\n");
-    printf("ENSURE JORUNEY TAKES LESS THAN CLOSING TIME (and overall better conditions)\n");
-    printf("ADD VIP BEHAVIOUR\n");
     printf("FERRY BEHAVIOUR\n");
     printf("ENSURE CORRECT GUIDE PATHING\n");
+    printf("ADD VIP BEHAVIOUR\n");
     printf("ADD SIGNAL1/2 FUNCTIONALITY\n");
-    printf("ADD KILL SAFEGUARD (using pid group)\n");
+    printf("ENSURE JORUNEY TAKES LESS THAN CLOSING TIME (and overall better conditions)\n");
+    printf("DECIDE HOW TO RESOLVE STOP SYSTEM TIME ISSUE\n");
+    printf("DECIDE ON HANDLING MORE WEIRD SIGNALS\n");
     struct sigaction sa;
     sa.sa_handler = handle_kill;
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = 0;
     sigaction(SIGINT, &sa, NULL);
+
+    sa.sa_handler = handle_stop;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    sigaction(SIGSTOP, &sa, NULL);
+
+    sa.sa_handler = handle_continue;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    sigaction(SIGCONT, &sa, NULL);
 
     setpgid(0, 0);
 
@@ -165,11 +201,10 @@ void init()
 
 void end_simulation()
 {
-    if (!end)
-    {
-        end = 1;
-        b_signal(-getpgrp(), SIGINT);
-    }
+    if (end) return;
+
+    end = 1;
+    b_signal(-getpgrp(), SIGINT);
 
     if (zombie_thread)
     {

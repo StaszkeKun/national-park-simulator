@@ -210,7 +210,7 @@ void operate()
                 printf("[GUIDE %d]: tires adding to bridge queue\n", my_id);
                 b_sem_p(semid, MUTEX_BRIDGE, 1);
                 ringbuffer_push_back(&shared_data->bridge_queue_clockwise, my_data->pid);
-                printf("[GUIDE %d %d]: joined queue at bridge\n", my_id, getpid());
+                printf("[GUIDE %d]: joined queue at bridge\n", my_id);
                 b_sem_v(semid, MUTEX_BRIDGE, 1);
 
                 while(!check_if_first_secure(&shared_data->bridge_queue_clockwise, MUTEX_BRIDGE))
@@ -225,7 +225,7 @@ void operate()
                 printf("[GUIDE %d]: tires adding to queue\n", my_id);
                 b_sem_p(semid, MUTEX_BRIDGE, 1);
                 ringbuffer_push_back(&shared_data->bridge_queue_aclockwise, my_data->pid);
-                printf("[GUIDE %d %d]: joined queue at bridge\n", my_id, getpid());
+                printf("[GUIDE %d]: joined queue at bridge\n", my_id);
                 b_sem_v(semid, MUTEX_BRIDGE, 1);
 
                 while(!check_if_first_secure(&shared_data->bridge_queue_aclockwise, MUTEX_BRIDGE))

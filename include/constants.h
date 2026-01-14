@@ -20,9 +20,8 @@ typedef enum
     VS_GOING_UP_TOWER,
     VS_AT_TOWER,
     VS_GOING_DOWN_TOWER,
-    VS_AT_FERRY_QUEUE,
+    VS_AT_FERRY_BOARDING,
     VS_AWAITING_FERRY_START,
-    VS_AT_FERRY_VOYAGE,
     VS_LEAVING
 } visitor_status_t;
 

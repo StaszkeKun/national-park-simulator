@@ -239,11 +239,17 @@ void operate()
 
             break;
         }
-        case VS_AT_FERRY_QUEUE:
-        case VS_AWAITING_FERRY_START:
-        case VS_AT_FERRY_VOYAGE:
+        case VS_AT_FERRY_BOARDING:
         {
-            end_simulation();
+            b_msq_send(msgid_guide, my_data->asigned_guide + 1, 1 + my_data->kids_count);
+            my_data->status = VS_AWAITING_FERRY_START;
+            break;
+        }
+        case VS_AWAITING_FERRY_START:
+        {
+            b_wait_for_wakeup();
+            b_msq_send(msgid_guide, my_data->asigned_guide + 1, 1 + my_data->kids_count);
+            my_data->status = VS_FOLLOWING_GUIDE;
             break;
         }
         case VS_LEAVING:

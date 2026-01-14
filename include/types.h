@@ -30,7 +30,9 @@ typedef struct
 
     //ferry managing
     bool ferry_side; //true (B side) //false (K side)
-    int ferry_seats;
+    int ferry_seats_taken;
+    int ferry_groups_boarded;
+    pid_t ferry_seats[FERRY_LIMIT];
     ringbuffer_t ferry_queue_clockwise;
     ringbuffer_t ferry_queue_aclockwise;
 

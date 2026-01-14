@@ -132,11 +132,10 @@ void check_configuration()
 
 void init()
 {
-    printf("FERRY BEHAVIOUR\n");
-    printf("ENSURE CORRECT GUIDE PATHING\n");
     printf("ADD VIP BEHAVIOUR\n");
     printf("ADD SIGNAL1/2 FUNCTIONALITY\n");
     printf("ENSURE JORUNEY TAKES LESS THAN CLOSING TIME (and overall better conditions)\n");
+    printf("ADD COMMENTS\n");
     printf("DECIDE HOW TO RESOLVE STOP SYSTEM TIME ISSUE\n");
     printf("DECIDE ON HANDLING MORE WEIRD SIGNALS\n");
     struct sigaction sa;
@@ -179,7 +178,8 @@ void init()
     shared_data->tower_seetime = b_randf(TOWER_ACTION_MIN_TIME, TOWER_ACTION_MAX_TIME);
     shared_data->tower_downtime = b_randf(TOWER_ACTION_MIN_TIME, TOWER_ACTION_MAX_TIME);
     shared_data->ferry_side = true;
-    shared_data->ferry_seats = FERRY_LIMIT;
+    shared_data->ferry_seats_taken = 0;
+    shared_data->ferry_groups_boarded = 0;
     shared_data->ferry_queue_clockwise.capacity = VISITORS_LIMIT;
     shared_data->ferry_queue_clockwise.count = 0;
     shared_data->ferry_queue_clockwise.head_idx = 0;

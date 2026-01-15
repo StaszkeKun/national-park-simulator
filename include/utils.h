@@ -239,7 +239,7 @@ void b_sem_v(int semid, int semnum, int val)
 
     if (semop(semid, &op, 1) < 0)
     {
-        perror("[ERROR]: Semaphore P operation error");
+        perror("[ERROR]: Semaphore V operation error");
         exit(EXIT_FAILURE);
     }
 }

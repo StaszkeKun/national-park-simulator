@@ -35,6 +35,8 @@ typedef struct
     pid_t ferry_seats[FERRY_LIMIT];
     ringbuffer_t ferry_queue_clockwise;
     ringbuffer_t ferry_queue_aclockwise;
+    ringbuffer_t ferry_vipqueue_clockwise;
+    ringbuffer_t ferry_vipqueue_aclockwise;
 
 } shared_data_t;
 

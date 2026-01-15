@@ -8,9 +8,9 @@ void end_simulation();
 void register_guide();
 void operate();
 void move();
-bool check_if_first_secure(void* ringbuffer, int mutex);
 bool try_pass_bridge();
 bool try_board_ferry();
+bool check_if_first_secure(void* buf, int mutex);
 
 int my_id;
 
@@ -232,7 +232,7 @@ void operate()
 
                 while(!check_if_first_secure(&shared_data->bridge_queue_aclockwise, MUTEX_BRIDGE))
                 {
-                    printf("[GUIDE %d]: aint first in line\n", my_id);
+                    printf("[GUIDE %d]: ain't first in line\n", my_id);
                     b_wait_for_wakeup();
                     printf("[GUIDE %d]: wake up check if first\n", my_id);
                 }
@@ -240,7 +240,7 @@ void operate()
 
             while(!try_pass_bridge())
             {
-                printf("[GUIDE %d]: couldnt pass %d\n", my_id, shared_data->groups_on_bridge);
+                printf("[GUIDE %d]: couldn't pass\n", my_id);
                 b_wait_for_wakeup();
                 printf("[GUIDE %d]: wake up trypass\n", my_id);
             }
@@ -269,12 +269,16 @@ void operate()
                 }
             }
 
+            b_sem_v(semid, MUTEX_BRIDGE, 1);
+
             b_sleep(shared_data->bridge_crosstime);
             printf("[GUIDE %d]: crossed bridge\n", my_id);
 
             b_sem_v(semid, SEM_BRIDGE, 1);
 
             visitors_checkins = 0;
+
+            b_sem_p(semid, MUTEX_BRIDGE, 1);
 
             while(visitors_checkins < visitors_in_group)
             {
@@ -363,7 +367,7 @@ void operate()
                 printf("[GUIDE %d]: joined queue at ferry\n", my_id);
                 b_sem_v(semid, MUTEX_FERRY, 1);
 
-                while(!check_if_first_secure(&shared_data->ferry_queue_clockwise, MUTEX_FERRY))
+                while(!check_if_first_secure(&shared_data->ferry_queue_clockwise, MUTEX_FERRY) && shared_data->ferry_vipqueue_clockwise.count == 0)
                 {
                     printf("[GUIDE %d]: ain't first in line\n", my_id);
                     b_wait_for_wakeup();
@@ -378,7 +382,7 @@ void operate()
                 printf("[GUIDE %d]: joined queue at ferry\n", my_id);
                 b_sem_v(semid, MUTEX_FERRY, 1);
 
-                while(!check_if_first_secure(&shared_data->ferry_queue_aclockwise, MUTEX_FERRY))
+                while(!check_if_first_secure(&shared_data->ferry_queue_aclockwise, MUTEX_FERRY) && shared_data->ferry_vipqueue_aclockwise.count == 0)
                 {
                     printf("[GUIDE %d]: aint first in line\n", my_id);
                     b_wait_for_wakeup();
@@ -399,7 +403,13 @@ void operate()
             if (clockwise_track)
             {
                 ringbuffer_pop_front(&shared_data->ferry_queue_clockwise, NULL);
-                if (shared_data->ferry_queue_clockwise.count > 0)
+                if (shared_data->ferry_vipqueue_clockwise.count > 0)
+                {
+                    pid_t next_first;
+                    ringbuffer_at(&shared_data->ferry_vipqueue_clockwise, 0, &next_first);
+                    b_signal(next_first, SIG_WAKE_UP);
+                }
+                else if (shared_data->ferry_queue_clockwise.count > 0)
                 {
                     pid_t next_first;
                     ringbuffer_at(&shared_data->ferry_queue_clockwise, 0, &next_first);
@@ -409,7 +419,13 @@ void operate()
             else
             {
                 ringbuffer_pop_front(&shared_data->ferry_queue_aclockwise, NULL);
-                if (shared_data->ferry_queue_aclockwise.count > 0)
+                if (shared_data->ferry_vipqueue_aclockwise.count > 0)
+                {
+                    pid_t next_first;
+                    ringbuffer_at(&shared_data->ferry_vipqueue_aclockwise, 0, &next_first);
+                    b_signal(next_first, SIG_WAKE_UP);
+                }
+                else if (shared_data->ferry_queue_aclockwise.count > 0)
                 {
                     pid_t next_first;
                     ringbuffer_at(&shared_data->ferry_queue_aclockwise, 0, &next_first);
@@ -432,12 +448,12 @@ void operate()
 
             if (ferry_leader)
             {
-                if (clockwise_track && shared_data->ferry_queue_clockwise.count != 0)
+                if (clockwise_track && (shared_data->ferry_queue_clockwise.count != 0 || shared_data->ferry_vipqueue_clockwise.count != 0))
                 {
                     printf("[GUIDE %d - ferry captain]: waiting for more passangers\n", my_id);
                     b_wait_for_wakeup();
                 }
-                else if (!clockwise_track && shared_data->ferry_queue_aclockwise.count != 0)
+                else if (!clockwise_track && (shared_data->ferry_queue_aclockwise.count != 0 || shared_data->ferry_vipqueue_aclockwise.count != 0))
                 {
                     printf("[GUIDE %d - ferry captain]: waiting for more passangers\n", my_id);
                     b_wait_for_wakeup();
@@ -467,7 +483,7 @@ void operate()
                 
                 if (clockwise_track)
                 {
-                    if (shared_data->ferry_queue_clockwise.count == 0)
+                    if (shared_data->ferry_queue_clockwise.count == 0 && shared_data->ferry_vipqueue_clockwise.count == 0)
                     {
                         printf("[GUIDE %d]: no more waiting for ferry - alerting captain\n", my_id);
                         b_signal(shared_data->ferry_seats[0], SIG_WAKE_UP);
@@ -475,7 +491,7 @@ void operate()
                 }
                 else
                 {
-                    if (shared_data->ferry_queue_aclockwise.count == 0)
+                    if (shared_data->ferry_queue_aclockwise.count == 0 && shared_data->ferry_vipqueue_aclockwise.count == 0)
                     {
                         printf("[GUIDE %d]: no more waiting for ferry - alerting captain\n", my_id);
                         b_signal(shared_data->ferry_seats[0], SIG_WAKE_UP);
@@ -500,14 +516,26 @@ void operate()
 
             b_sem_v(semid, SEM_FERRY, 1 + visitors_in_group);
 
-            if (shared_data->ferry_queue_clockwise.count > 0)
+            if (shared_data->ferry_vipqueue_clockwise.count > 0)
+            {
+                pid_t next_first;
+                ringbuffer_at(&shared_data->ferry_vipqueue_clockwise, 0, &next_first);
+                b_signal(next_first, SIG_WAKE_UP);
+            }
+            else if (shared_data->ferry_queue_clockwise.count > 0)
             {
                 pid_t next_first;
                 ringbuffer_at(&shared_data->ferry_queue_clockwise, 0, &next_first);
                 b_signal(next_first, SIG_WAKE_UP);
             }
 
-            if (shared_data->ferry_queue_aclockwise.count > 0)
+            if (shared_data->ferry_vipqueue_aclockwise.count > 0)
+            {
+                pid_t next_first;
+                ringbuffer_at(&shared_data->ferry_vipqueue_aclockwise, 0, &next_first);
+                b_signal(next_first, SIG_WAKE_UP);
+            }
+            else if (shared_data->ferry_queue_aclockwise.count > 0)
             {
                 pid_t next_first;
                 ringbuffer_at(&shared_data->ferry_queue_aclockwise, 0, &next_first);
@@ -572,22 +600,6 @@ void move()
     printf("[GUIDE %d]: finished moving\n", my_id);
 }
 
-bool check_if_first_secure(void* buf, int mutex)
-{
-    b_sem_p(semid, mutex, 1);
-
-    pid_t first_element;
-    ringbuffer_at(buf, 0, &first_element);
-    if (first_element == my_data->pid)
-    {
-        b_sem_v(semid, mutex, 1);
-        return true;
-    }
-
-    b_sem_v(semid, mutex, 1);
-    return false;
-}
-
 bool try_pass_bridge()
 {
     b_sem_p(semid, MUTEX_BRIDGE, 1);
@@ -625,6 +637,8 @@ bool try_board_ferry()
 
     if (shared_data->ferry_side != clockwise_track && shared_data->ferry_seats_taken == 0);
     {
+        printf("[GUIDE %d] no one on the other side calling the ferry\n", my_id);
+        b_sleep(FERRY_VOYAGE_TIME);
         shared_data->ferry_side = clockwise_track;
     }
 
@@ -659,4 +673,20 @@ bool try_board_ferry()
 
     b_sem_v(semid, MUTEX_FERRY, 1);
     return true;
+}
+
+bool check_if_first_secure(void* buf, int mutex)
+{
+    b_sem_p(semid, mutex, 1);
+
+    pid_t first_element;
+    ringbuffer_at(buf, 0, &first_element);
+    if (first_element == my_data->pid)
+    {
+        b_sem_v(semid, mutex, 1);
+        return true;
+    }
+
+    b_sem_v(semid, mutex, 1);
+    return false;
 }

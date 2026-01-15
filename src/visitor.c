@@ -8,6 +8,8 @@ void end_simulation();
 void operate();
 int register_visitor();
 void create_visitor();
+bool try_pass_bridge_vip();
+bool try_board_ferry_vip();
 bool check_if_first_secure(void* buf, int mutex);
 
 void handle_wake_up(int sig)
@@ -40,6 +42,8 @@ visitor_data_t* my_data = NULL;
 
 int fifo_regular = -1;
 int fifo_vip = -1;
+bool vip_clockwise_track;
+bool ferry_leader;
 
 int main()
 {
@@ -128,8 +132,21 @@ void operate()
         {
             if (my_data->isVIP)
             {
-                printf("[VIP]: %d chosing a direction\n", my_data->pid);
-                my_data->status = VS_FOLLOWING_GUIDE;
+                printf("[VIP %d]: chosing a direction\n", my_data->pid);
+                if (vip_clockwise_track)
+                {
+                    printf("[VIP %d]: moving to bridge\n", my_data->pid);
+                    b_sleep(b_randf(GUIDES_MOVETIME_MIN, GUIDES_MOVETIME_MAX));
+                    my_data->status = VS_AT_BRIDGE;
+                    break;
+                }
+                else
+                {
+                    printf("[VIP %d]: moving to ferry\n", my_data->pid);
+                    b_sleep(b_randf(GUIDES_MOVETIME_MIN, GUIDES_MOVETIME_MAX));
+                    my_data->status = VS_AT_FERRY_BOARDING;
+                    break;
+                }
             }
             else
             {
@@ -140,36 +157,143 @@ void operate()
         case VS_AWAITING_TICKET:
         case VS_AWAITING_START:
         case VS_AT_BRIDGE_QUEUE:
+        case VS_FOLLOWING_GUIDE:
         {
             b_wait_for_wakeup();
             break;
         }
-        case VS_FOLLOWING_GUIDE:
+        case VS_AT_BRIDGE:
         {
             if (my_data->isVIP)
             {
-                printf("[VIP]: %d moving\n", my_data->pid);
-                b_sleep(5);
-                my_data->status = VS_LEAVING;
+                printf("[VIP %d]: arrived at bridge\n", my_data->pid);
+                if (vip_clockwise_track)
+                {
+                    printf("[VIP %d]: tires adding to bridge queue\n", my_data->pid);
+                    b_sem_p(semid, MUTEX_BRIDGE, 1);
+                    ringbuffer_push_back(&shared_data->bridge_queue_clockwise, my_data->pid);
+                    printf("[VIP %d]: joined queue at bridge\n", my_data->pid);
+                    b_sem_v(semid, MUTEX_BRIDGE, 1);
+
+                    while(!check_if_first_secure(&shared_data->bridge_queue_clockwise, MUTEX_BRIDGE))
+                    {
+                        printf("[VIP %d]: ain't first in line\n", my_data->pid);
+                        b_wait_for_wakeup();
+                        printf("[VTP %d]: wake up check if first\n", my_data->pid);
+                    }
+                }
+                else
+                {
+                    printf("[VIP %d]: tires adding to bridge queue\n", my_data->pid);
+                    b_sem_p(semid, MUTEX_BRIDGE, 1);
+                    ringbuffer_push_back(&shared_data->bridge_queue_aclockwise, my_data->pid);
+                    printf("[VIP %d]: joined queue at bridge\n", my_data->pid);
+                    b_sem_v(semid, MUTEX_BRIDGE, 1);
+
+                    while(!check_if_first_secure(&shared_data->bridge_queue_aclockwise, MUTEX_BRIDGE))
+                    {
+                        printf("[VIP %d]: ain't first in line\n", my_data->pid);
+                        b_wait_for_wakeup();
+                        printf("[VTP %d]: wake up check if first\n", my_data->pid);
+                    }
+                }
+
+                while(!try_pass_bridge_vip())
+                {
+                    printf("[VIP %d]: couldn't pass\n", my_data->pid);
+                    b_wait_for_wakeup();
+                    printf("[VIP %d]: wake up trypass\n", my_data->pid);
+                }
+
+                b_sem_p(semid, MUTEX_BRIDGE, 1);
+
+                printf("[VIP %d]: started crossing bridge\n", my_data->pid);
+                if (vip_clockwise_track)
+                {
+                    ringbuffer_pop_front(&shared_data->bridge_queue_clockwise, NULL);
+                    if (shared_data->bridge_queue_clockwise.count > 0)
+                    {
+                        pid_t next_first;
+                        ringbuffer_at(&shared_data->bridge_queue_clockwise, 0, &next_first);
+                        b_signal(next_first, SIG_WAKE_UP);
+                    }
+                }
+                else
+                {
+                    ringbuffer_pop_front(&shared_data->bridge_queue_aclockwise, NULL);
+                    if (shared_data->bridge_queue_aclockwise.count > 0)
+                    {
+                        pid_t next_first;
+                        ringbuffer_at(&shared_data->bridge_queue_aclockwise, 0, &next_first);
+                        b_signal(next_first, SIG_WAKE_UP);
+                    }
+                }
+
+                b_sem_v(semid, MUTEX_BRIDGE, 1);
+
+                b_sleep(shared_data->bridge_crosstime);
+                printf("[VIP %d]: crossed bridge\n", my_data->pid);
+
+                b_sem_v(semid, SEM_BRIDGE, 1);
+
+                b_sem_p(semid, MUTEX_BRIDGE, 1);
+
+                shared_data->groups_on_bridge--;
+                if (vip_clockwise_track)
+                {
+                    printf("[VIP %d]: try signaling opposite group\n", my_data->pid);
+                    if (shared_data->bridge_queue_aclockwise.count > 0)
+                    {
+                        printf("[VIP %d]: signaling opposite group\n", my_data->pid);
+                        pid_t next_first;
+                        ringbuffer_at(&shared_data->bridge_queue_aclockwise, 0, &next_first);
+                        b_signal(next_first, SIG_WAKE_UP);
+                    }
+                }
+                else
+                {
+                    printf("[VIP %d]: try signaling opposite group\n", my_data->pid);
+                    if (shared_data->bridge_queue_clockwise.count > 0)
+                    {
+                        printf("[VIP %d]: signaling opposite group\n", my_data->pid);
+                        pid_t next_first;
+                        ringbuffer_at(&shared_data->bridge_queue_clockwise, 0, &next_first);
+                        b_signal(next_first, SIG_WAKE_UP);
+                    }
+                }
+
+                b_sem_v(semid, MUTEX_BRIDGE, 1);
+                printf("[VIP %d]: left bridge\n", my_data->pid);
+
+                if (vip_clockwise_track)
+                {
+                    printf("[VIP %d]: moving to cashier\n", my_data->pid);
+                    b_sleep(b_randf(GUIDES_MOVETIME_MIN, GUIDES_MOVETIME_MAX));
+                    my_data->status = VS_GOING_UP_TOWER;
+                }
+                else
+                {
+                    printf("[VIP %d]: moving to cashier\n", my_data->pid);
+                    b_sleep(b_randf(GUIDES_MOVETIME_MIN, GUIDES_MOVETIME_MAX));
+                    b_msq_send(msgid_cashier, 2, my_data->pid);
+                    b_wait_for_wakeup();
+                }
+
+                break;
             }
             else
             {
-                b_wait_for_wakeup();
+                b_sem_p(semid, SEM_BRIDGE, 1 + my_data->kids_count);
+    
+                b_sleep(shared_data->bridge_crosstime);
+    
+                b_sem_v(semid, SEM_BRIDGE, 1 + my_data->kids_count);
+    
+                b_msq_send(msgid_guide, my_data->asigned_guide + 1, my_data->kids_count + 1);
+    
+                my_data->status = VS_FOLLOWING_GUIDE;
+                break;
             }
-            break;
-        }
-        case VS_AT_BRIDGE:
-        {
-            b_sem_p(semid, SEM_BRIDGE, 1 + my_data->kids_count);
-
-            b_sleep(shared_data->bridge_crosstime);
-
-            b_sem_v(semid, SEM_BRIDGE, 1 + my_data->kids_count);
-
-            b_msq_send(msgid_guide, my_data->asigned_guide + 1, my_data->kids_count + 1);
-
-            my_data->status = VS_FOLLOWING_GUIDE;
-            break;
         }
         case VS_AT_TOWER_QUEUE:
         {
@@ -221,8 +345,8 @@ void operate()
         }
         case VS_AT_TOWER:
         {
+            
             b_sleep(shared_data->tower_seetime);
-
             my_data->status = VS_GOING_DOWN_TOWER;
 
             break;
@@ -233,9 +357,28 @@ void operate()
 
             b_sem_v(semid, SEM_TOWER, 1 + my_data->kids_count);
 
-            b_msq_send(msgid_guide, my_data->asigned_guide + 1, 1 + my_data->kids_count);
+            if (my_data->isVIP)
+            {
+                if (vip_clockwise_track)
+                {
+                    printf("[VIP %d]: moving to ferry\n", my_data->pid);
+                    b_sleep(b_randf(GUIDES_MOVETIME_MIN, GUIDES_MOVETIME_MAX));
+                    my_data->status = VS_AWAITING_FERRY_START;
+                }
+                else
+                {
+                    printf("[VIP %d]: moving to bridge\n", my_data->pid);
+                    b_sleep(b_randf(GUIDES_MOVETIME_MIN, GUIDES_MOVETIME_MAX));
+                    my_data->status = VS_AT_BRIDGE;
+                }
+            }
+            else
+            {
+                b_msq_send(msgid_guide, my_data->asigned_guide + 1, 1 + my_data->kids_count);
 
-            my_data->status = VS_FOLLOWING_GUIDE;
+                my_data->status = VS_FOLLOWING_GUIDE;
+            }
+
 
             break;
         }
@@ -247,20 +390,192 @@ void operate()
         }
         case VS_AWAITING_FERRY_START:
         {
-            b_wait_for_wakeup();
-            b_msq_send(msgid_guide, my_data->asigned_guide + 1, 1 + my_data->kids_count);
-            my_data->status = VS_FOLLOWING_GUIDE;
+            if (my_data->isVIP)
+            {
+                printf("[VIP %d]: arrived at ferry\n", my_data->pid);
+
+                if (vip_clockwise_track)
+                {
+                    printf("[VIP %d]: tires adding to ferry vip queue\n", my_data->pid);
+                    b_sem_p(semid, MUTEX_FERRY, 1);
+                    ringbuffer_push_back(&shared_data->ferry_vipqueue_clockwise, my_data->pid);
+                    printf("[VIP %d]: joined vip queue at ferry\n", my_data->pid);
+                    b_sem_v(semid, MUTEX_FERRY, 1);
+
+                    while(!check_if_first_secure(&shared_data->ferry_vipqueue_clockwise, MUTEX_FERRY))
+                    {
+                        printf("[VIP %d]: ain't first in line\n", my_data->pid);
+                        b_wait_for_wakeup();
+                        printf("[VIP %d]: wake up check if first\n", my_data->pid);
+                    }
+                }
+                else
+                {
+                    printf("[VIP %d]: tires adding to ferry vip queue\n", my_data->pid);
+                    b_sem_p(semid, MUTEX_FERRY, 1);
+                    ringbuffer_push_back(&shared_data->ferry_vipqueue_aclockwise, my_data->pid);
+                    printf("[VIP %d]: joined vip queue at ferry\n", my_data->pid);
+                    b_sem_v(semid, MUTEX_FERRY, 1);
+
+                    while(!check_if_first_secure(&shared_data->ferry_vipqueue_aclockwise, MUTEX_FERRY))
+                    {
+                        printf("[VIP %d]: aint first in line\n", my_data->pid);
+                        b_wait_for_wakeup();
+                        printf("[VIP %d]: wake up check if first\n", my_data->pid);
+                    }
+                }
+
+                while(!try_board_ferry_vip())
+                {
+                    printf("[VIP %d]: couldnt board\n", my_data->pid);
+                    b_wait_for_wakeup();
+                    printf("[VIP %d]: wake up tryboard\n", my_data->pid);
+                }
+
+                b_sem_p(semid, MUTEX_FERRY, 1);
+
+                printf("[VIP %d]: boarded ferry\n", my_data->pid);
+                if (vip_clockwise_track)
+                {
+                    ringbuffer_pop_front(&shared_data->ferry_vipqueue_clockwise, NULL);
+                    if (shared_data->ferry_vipqueue_clockwise.count > 0)
+                    {
+                        pid_t next_first;
+                        ringbuffer_at(&shared_data->ferry_vipqueue_clockwise, 0, &next_first);
+                        b_signal(next_first, SIG_WAKE_UP);
+                    }
+                    else if (shared_data->ferry_queue_clockwise.count > 0)
+                    {
+                        pid_t next_first;
+                        ringbuffer_at(&shared_data->ferry_queue_clockwise, 0, &next_first);
+                        b_signal(next_first, SIG_WAKE_UP);
+                    }
+                }
+                else
+                {
+                    ringbuffer_pop_front(&shared_data->ferry_vipqueue_aclockwise, NULL);
+                    if (shared_data->ferry_vipqueue_aclockwise.count > 0)
+                    {
+                        pid_t next_first;
+                        ringbuffer_at(&shared_data->ferry_vipqueue_aclockwise, 0, &next_first);
+                        b_signal(next_first, SIG_WAKE_UP);
+                    }
+                    else if (shared_data->ferry_queue_aclockwise.count > 0)
+                    {
+                        pid_t next_first;
+                        ringbuffer_at(&shared_data->ferry_queue_aclockwise, 0, &next_first);
+                        b_signal(next_first, SIG_WAKE_UP);
+                    }
+                }
+
+                shared_data->ferry_groups_boarded++;
+
+                b_sem_v(semid, MUTEX_FERRY, 1);
+
+                if (ferry_leader)
+                {
+                    if (vip_clockwise_track && (shared_data->ferry_queue_clockwise.count != 0 || shared_data->ferry_vipqueue_clockwise.count != 0))
+                    {
+                        printf("[VIP %d - ferry captain]: waiting for more passangers\n", my_data->pid);
+                        b_wait_for_wakeup();
+                    }
+                    else if (!vip_clockwise_track && (shared_data->ferry_queue_aclockwise.count != 0 || shared_data->ferry_vipqueue_aclockwise.count != 0))
+                    {
+                        printf("[VIP %d - ferry captain]: waiting for more passangers\n", my_data->pid);
+                        b_wait_for_wakeup();
+                    }
+
+                    b_sem_p(semid, MUTEX_FERRY, 1);
+
+                    shared_data->ferry_side = 2;
+
+                    printf("[VIP %d - ferry captain]: ferry starts\n", my_data->pid);
+                    b_sleep(FERRY_VOYAGE_TIME);
+                    printf("[VIP %d - ferry captain]: ferry stops\n", my_data->pid);
+
+                    for(int i = 1; i < shared_data->ferry_seats_taken; i++)
+                    {
+                        b_signal(shared_data->ferry_seats[i], SIG_WAKE_UP);
+                    }
+
+                    shared_data->ferry_seats_taken = 0;
+                    shared_data->ferry_side = 1 - vip_clockwise_track;
+                    
+                    b_sem_v(semid, MUTEX_FERRY, 1);
+                }
+                else
+                {
+                    b_sem_p(semid, MUTEX_FERRY, 1);
+                    
+                    if (vip_clockwise_track)
+                    {
+                        if (shared_data->ferry_queue_clockwise.count == 0 && shared_data->ferry_vipqueue_clockwise.count == 0)
+                        {
+                            printf("[VIP %d]: no more waiting for ferry - alerting captain\n", my_data->pid);
+                            b_signal(shared_data->ferry_seats[0], SIG_WAKE_UP);
+                        }
+                    }
+                    else
+                    {
+                        if (shared_data->ferry_queue_aclockwise.count == 0 && shared_data->ferry_vipqueue_aclockwise.count == 0)
+                        {
+                            printf("[VIP %d]: no more waiting for ferry - alerting captain\n", my_data->pid);
+                            b_signal(shared_data->ferry_seats[0], SIG_WAKE_UP);
+                        }
+                    }
+                    b_signal(shared_data->ferry_seats[0], SIG_WAKE_UP);
+
+                    b_sem_v(semid, MUTEX_FERRY, 1);
+                    b_wait_for_wakeup();
+                }
+
+                b_sem_v(semid, SEM_FERRY, 1);
+
+                if (shared_data->ferry_vipqueue_clockwise.count > 0)
+                {
+                    pid_t next_first;
+                    ringbuffer_at(&shared_data->ferry_vipqueue_clockwise, 0, &next_first);
+                    b_signal(next_first, SIG_WAKE_UP);
+                }
+                else if (shared_data->ferry_queue_clockwise.count > 0)
+                {
+                    pid_t next_first;
+                    ringbuffer_at(&shared_data->ferry_queue_clockwise, 0, &next_first);
+                    b_signal(next_first, SIG_WAKE_UP);
+                }
+
+                if (shared_data->ferry_vipqueue_aclockwise.count > 0)
+                {
+                    pid_t next_first;
+                    ringbuffer_at(&shared_data->ferry_vipqueue_aclockwise, 0, &next_first);
+                    b_signal(next_first, SIG_WAKE_UP);
+                }
+                else if (shared_data->ferry_queue_aclockwise.count > 0)
+                {
+                    pid_t next_first;
+                    ringbuffer_at(&shared_data->ferry_queue_aclockwise, 0, &next_first);
+                    b_signal(next_first, SIG_WAKE_UP);
+                }
+
+                if (vip_clockwise_track)
+                {
+                    my_data->status = GS_MOVING_TO_CASH; /////!!!
+                }
+                else
+                {
+                    my_data->status = GS_MOVING_TO_TOWER; /////!!!
+                }
+            }
+            else
+            {
+                b_wait_for_wakeup();
+                b_msq_send(msgid_guide, my_data->asigned_guide + 1, 1 + my_data->kids_count);
+                my_data->status = VS_FOLLOWING_GUIDE;
+            }
             break;
         }
         case VS_LEAVING:
         {
-            if (my_data->isVIP)
-            {
-                printf("[VIP]: %d moving\n", my_data->pid);
-                b_sleep(5);
-                b_msq_send(msgid_cashier, 2, my_data->pid);
-            }
-
             end_simulation();
             break;
         }
@@ -312,6 +627,8 @@ void create_visitor()
     if (b_randf(0, 1) <= VIP_CHANCE)
     {
         my_data->isVIP = true;
+        if (b_randf(0, 1) < 0.5) vip_clockwise_track = true;
+        else vip_clockwise_track = false;
     }
     else
     {
@@ -328,6 +645,70 @@ void create_visitor()
     }
 
     my_data->status = VS_NONE;
+}
+
+bool try_pass_bridge_vip()
+{
+    b_sem_p(semid, MUTEX_BRIDGE, 1);
+
+    if (shared_data->bridge_direction != vip_clockwise_track)
+    {
+        if (shared_data->groups_on_bridge == 0)
+        {
+            shared_data->bridge_direction = vip_clockwise_track;
+        }
+        else
+        {
+            b_sem_v(semid, MUTEX_BRIDGE, 1);
+            return false;
+        }
+    }
+
+    shared_data->groups_on_bridge++;
+
+    b_sem_p(semid, SEM_BRIDGE, 1);
+
+    b_sem_v(semid, MUTEX_BRIDGE, 1);
+    return true;
+}
+
+bool try_board_ferry_vip()
+{
+    b_sem_p(semid, MUTEX_FERRY, 1);
+
+    if (shared_data->ferry_side != vip_clockwise_track && shared_data->ferry_seats_taken == 0);
+    {
+        printf("[VIP %d] no one on the other side calling the ferry\n", my_data->pid);
+        shared_data->ferry_side = 2;
+        b_sleep(FERRY_VOYAGE_TIME);
+        shared_data->ferry_side = vip_clockwise_track;
+    }
+
+    if (shared_data->ferry_side != vip_clockwise_track)
+    {
+        b_sem_v(semid, MUTEX_FERRY, 1);
+        return false;
+    }
+
+    if (b_sem_check(semid, SEM_FERRY) < 1)
+    {
+        printf("[VIP %d] couldn't fit on ferry - alerting captain\n", my_data->pid);
+        b_signal(shared_data->ferry_seats[0], SIG_WAKE_UP);
+        b_sem_v(semid, MUTEX_FERRY, 1);
+        return false;
+    }
+
+    b_sem_p(semid, SEM_FERRY, 1);
+
+    shared_data->ferry_seats[shared_data->ferry_seats_taken] = my_data->pid;
+
+    if (shared_data->ferry_seats_taken == 0) ferry_leader = true;
+    else ferry_leader = false;
+
+    shared_data->ferry_seats_taken++;
+
+    b_sem_v(semid, MUTEX_FERRY, 1);
+    return true;
 }
 
 bool check_if_first_secure(void* buf, int mutex)

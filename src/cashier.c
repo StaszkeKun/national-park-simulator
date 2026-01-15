@@ -35,6 +35,8 @@ void print_leaving()
         if (visitor_data->isVIP)
         {
             printf("[CASHIER]: VIP %ld left\n", visitor_pid);
+            visitor_data->status = VS_LEAVING;
+            b_signal(visitor_pid, SIG_WAKE_UP);
         }
         else
         {

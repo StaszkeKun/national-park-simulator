@@ -41,6 +41,23 @@ void handle_wake_up(int sig)
     (void)sig;
 }
 
+void handle_leave_park(int sig)
+{
+    (void)sig;
+}
+
+void handle_leave_tower(int sig)
+{
+    (void)sig;
+    char* msg[64];
+    sprintf(*msg, "[GUIDE %d]: received SIG_LEAVE_TOWER signal\n", my_id);
+    write(1, msg, sizeof(msg));
+    for(int i = 0; i < my_data->group_count; i++)
+    {
+        b_signal(my_data->groups[i]->pid, SIG_LEAVE_TOWER);
+    }
+}
+
 int main(int argc, char *argv[])
 {
     if(argc < 2)
@@ -79,6 +96,16 @@ void init()
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = 0;
     sigaction(SIG_WAKE_UP, &sa, NULL);
+
+    sa.sa_handler = handle_leave_park;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    sigaction(SIG_LEAVE_PARK, &sa, NULL);
+
+    sa.sa_handler = handle_leave_tower;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    sigaction(SIG_LEAVE_TOWER, &sa, NULL);
 
     sigset_t set;
     sigemptyset(&set);

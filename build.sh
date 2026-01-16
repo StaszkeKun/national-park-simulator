@@ -6,8 +6,8 @@ else
     echo "Building with no test"
 fi
 
-gcc -Iinclude -g -fsanitize=address,undefined $FLAG src/main.c -lm -lpthread -o bin/main
-gcc -Iinclude -g -fsanitize=address,undefined $FLAG src/cashier.c -lm -lpthread -o bin/cashier
-gcc -Iinclude -g -fsanitize=address,undefined $FLAG src/guide.c -lm -lpthread -o bin/guide
-gcc -Iinclude -g -fsanitize=address,undefined $FLAG src/visitor.c -lm -lpthread -o bin/visitor
-gcc -Iinclude -g -fsanitize=address,undefined $FLAG src/commands_cli.c -lm -lpthread -o bin/commands_cli
+gcc -Iinclude $FLAG src/main.c -lm -lpthread -o bin/main
+gcc -Iinclude $FLAG src/cashier.c -lm -lpthread -o bin/cashier
+gcc -Iinclude $FLAG src/guide.c -lm -lpthread -o bin/guide
+gcc -Iinclude $FLAG src/visitor.c -lm -lpthread -o bin/visitor
+gcc -Iinclude $FLAG src/commands_cli.c -lm -lpthread -o bin/commands_cli

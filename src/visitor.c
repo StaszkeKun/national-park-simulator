@@ -23,6 +23,13 @@ void handle_kill(int sig)
     end_simulation();
 }
 
+volatile sig_atomic_t leave_park = 0;
+void handle_leave_park(int sig)
+{
+    (void)sig;
+    leave_park = 1;
+}
+
 void kid_thread()
 {
     while(true)
@@ -44,6 +51,13 @@ int fifo_regular = -1;
 int fifo_vip = -1;
 bool vip_clockwise_track;
 bool ferry_leader;
+
+volatile sig_atomic_t leave_tower = 0;
+void handle_leave_tower(int sig)
+{
+    (void)sig;
+    leave_tower = 1;
+}
 
 int main()
 {
@@ -70,6 +84,16 @@ void init()
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = 0;
     sigaction(SIG_WAKE_UP, &sa, NULL);
+
+    sa.sa_handler = handle_leave_park;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    sigaction(SIG_LEAVE_PARK, &sa, NULL);
+
+    sa.sa_handler = handle_leave_tower;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    sigaction(SIG_LEAVE_TOWER, &sa, NULL);
 
     sigset_t set;
     sigemptyset(&set);
@@ -102,7 +126,7 @@ void end_simulation()
         }
     }
 
-    b_shm_dettach(visitors_data);
+    if (visitors_data != NULL) b_shm_dettach(visitors_data);
 
     if(fifo_regular >= 0) b_fifo_close(fifo_regular);
     if(fifo_vip >= 0) b_fifo_close(fifo_vip);
@@ -157,8 +181,14 @@ void operate()
         case VS_AWAITING_TICKET:
         case VS_AWAITING_START:
         case VS_AT_BRIDGE_QUEUE:
+        {
+            b_wait_for_wakeup();
+            break;
+        }
         case VS_FOLLOWING_GUIDE:
         {
+            leave_park = 0;
+            leave_tower = 0;
             b_wait_for_wakeup();
             break;
         }
@@ -284,13 +314,13 @@ void operate()
             else
             {
                 b_sem_p(semid, SEM_BRIDGE, 1 + my_data->kids_count);
-    
+
                 b_sleep(shared_data->bridge_crosstime);
-    
+
                 b_sem_v(semid, SEM_BRIDGE, 1 + my_data->kids_count);
-    
+
                 b_msq_send(msgid_guide, my_data->asigned_guide + 1, my_data->kids_count + 1);
-    
+
                 my_data->status = VS_FOLLOWING_GUIDE;
                 break;
             }
@@ -309,18 +339,25 @@ void operate()
             b_sem_p(semid, MUTEX_TOWER, 1);
 
             ringbuffer_push_back(&shared_data->tower_queue, my_data->pid);
-            b_sem_v(semid, MUTEX_TOWER, 1);
 
+            b_sem_v(semid, MUTEX_TOWER, 1);
+            
             while(!check_if_first_secure(&shared_data->tower_queue, MUTEX_TOWER))
             {
                 b_wait_for_wakeup();
+                if (leave_park == 1)
+                {
+                    b_msq_send(msgid_guide, my_data->asigned_guide + 1, 1 + my_data->kids_count);
+                    my_data->status = VS_FOLLOWING_GUIDE;
+                    break;
+                }
             }
 
             b_sem_p(semid, MUTEX_TOWER, 1);
 
             ringbuffer_pop_front(&shared_data->tower_queue, NULL);
 
-            if (shared_data->tower_queue.count > 0)
+            for(int i = 0; i < shared_data->tower_queue.count; i++)
             {
                 pid_t new_first;
                 ringbuffer_at(&shared_data->tower_queue, 0, &new_first);
@@ -335,6 +372,12 @@ void operate()
         }
         case VS_GOING_UP_TOWER:
         {
+            if (leave_park == 1)
+            {
+                b_msq_send(msgid_guide, my_data->asigned_guide + 1, 1 + my_data->kids_count);
+                my_data->status = VS_FOLLOWING_GUIDE;
+                break;
+            }
             b_sem_p(semid, SEM_TOWER, 1 + my_data->kids_count);
 
             b_sleep(shared_data->tower_uptime);
@@ -345,8 +388,7 @@ void operate()
         }
         case VS_AT_TOWER:
         {
-            
-            b_sleep(shared_data->tower_seetime);
+            if (leave_tower == 0) b_sleep_cond(shared_data->tower_seetime, &leave_tower);
             my_data->status = VS_GOING_DOWN_TOWER;
 
             break;
@@ -559,11 +601,11 @@ void operate()
 
                 if (vip_clockwise_track)
                 {
-                    my_data->status = GS_MOVING_TO_CASH; /////!!!
+                    my_data->status = GS_MOVING_TO_CASH;
                 }
                 else
                 {
-                    my_data->status = GS_MOVING_TO_TOWER; /////!!!
+                    my_data->status = GS_MOVING_TO_TOWER;
                 }
             }
             else

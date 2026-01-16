@@ -113,6 +113,32 @@ void b_sleep(double time)
     }
 }
 
+void b_sleep_cond(double time, volatile sig_atomic_t* cond)
+{
+    if (time <= 0.0) return;
+
+    struct timespec tv, rem;
+    tv.tv_sec = (time_t)time;
+    tv.tv_nsec = (long)((time - tv.tv_sec) * 1e9);
+
+    if (tv.tv_nsec >= 1000000000L)
+    {
+        tv.tv_sec++;
+        tv.tv_nsec -= 1000000000L;
+    }
+
+    while (nanosleep(&tv, &rem) == -1)
+    {
+        if (errno != EINTR)
+        {
+            perror("[ERROR]: sleep error");
+            exit(EXIT_FAILURE);
+        }
+        tv = rem;
+        if (*cond == 1) break;
+    }
+}
+
 // microsecond-precision UNIX epoch
 double b_tick()
 {

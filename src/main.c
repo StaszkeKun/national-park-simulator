@@ -132,7 +132,6 @@ void check_configuration()
 
 void init()
 {
-    printf("ADD VIP BEHAVIOUR\n");
     printf("ADD SIGNAL1/2 FUNCTIONALITY\n");
     printf("ENSURE JORUNEY TAKES LESS THAN CLOSING TIME (and overall better conditions)\n");
     printf("RLIMITS check\n");

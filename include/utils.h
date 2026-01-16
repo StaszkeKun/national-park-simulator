@@ -162,6 +162,22 @@ int b_shm_get_id(int id, size_t size)
     return shmid;
 }
 
+int b_shm_get_id_ifexist(int id, size_t size)
+{
+    int shmid = shmget(_get_key('M'+id), size, 0);
+    if (shmid == -1)
+    {
+        if (errno = ENOENT)
+        {
+            printf("specified shared memory doesn't exist\n");
+            return -1;
+        }
+        perror("[ERROR]: Shared memory get id error");
+        exit(EXIT_FAILURE);
+    }
+    return shmid;
+}
+
 void b_shm_remove(int shmid)
 {
     if (shmctl(shmid, IPC_RMID, NULL) == -1)

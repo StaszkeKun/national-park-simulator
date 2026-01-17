@@ -17,25 +17,11 @@ visitor_data_t* visitors_data;
 int semid;
 pid_t new_process;
 
-volatile sig_atomic_t end = 0;
-pthread_t zombie_thread = 0;
-void zombie_cleaner()
-{
-    while(!end)
-    {
-        wait(NULL);
-    }
-
-    while(errno != ECHILD)
-    {
-        wait(NULL);
-    }
-}
-
+volatile sig_atomic_t kill_requested = 0;
 void handle_kill(int sig)
 {
     (void)sig;
-    end_simulation();
+    kill_requested = 1;
 }
 
 volatile sig_atomic_t stop_handled = 0;
@@ -43,11 +29,11 @@ void handle_stop(int sig)
 {
     (void)sig;
     if (stop_handled) return;
-
+    
     stop_handled = 1;
-
+    
     b_signal(-getpgrp(), SIGSTOP);
-
+    
     stop_handled = 0;
     pause();
 }
@@ -57,12 +43,29 @@ void handle_continue(int sig)
 {
     (void)sig;
     if (cont_handled) return;
-
+    
     cont_handled = 1;
-
+    
     b_signal(-getpgrp(), SIGCONT);
-
+    
     cont_handled = 0;
+}
+
+pthread_t zombie_thread = 0;
+void* zombie_cleaner(void *arg)
+{
+    (void)arg;
+    while(!kill_requested)
+    {
+        wait(NULL);
+    }
+
+    while(errno != ECHILD)
+    {
+        wait(NULL);
+    }
+
+    return NULL;
 }
 
 int main()
@@ -83,9 +86,10 @@ int main()
         if (new_process == -1) end_simulation();
     }
 
-    while(true)
+    while(!kill_requested)
     {
         b_sleep(b_randf(VISITOR_SPAWN_MIN_INTERVAL, VISITOR_SPAWN_MAX_INTERVAL));
+        if (kill_requested) break;
         new_process = b_execute("./bin/visitor", NULL);
         if (new_process == -1)
         {
@@ -132,6 +136,7 @@ void check_configuration()
 
 void init()
 {
+    printf("MAKE ALL SLEEPS CONDITIONAL?(for instant exiting)\n");
     printf("ADD SIGNAL1/2 FUNCTIONALITY\n");
     printf("ENSURE JORUNEY TAKES LESS THAN CLOSING TIME (and overall better conditions)\n");
     printf("RLIMITS check\n");
@@ -186,6 +191,14 @@ void init()
     shared_data->ferry_queue_aclockwise.count = 0;
     shared_data->ferry_queue_aclockwise.head_idx = 0;
     shared_data->ferry_queue_aclockwise.tail_idx = 0;
+    shared_data->ferry_vipqueue_clockwise.capacity = VISITORS_LIMIT;
+    shared_data->ferry_vipqueue_clockwise.count = 0;
+    shared_data->ferry_vipqueue_clockwise.head_idx = 0;
+    shared_data->ferry_vipqueue_clockwise.tail_idx = 0;
+    shared_data->ferry_vipqueue_aclockwise.capacity = VISITORS_LIMIT;
+    shared_data->ferry_vipqueue_aclockwise.count = 0;
+    shared_data->ferry_vipqueue_aclockwise.head_idx = 0;
+    shared_data->ferry_vipqueue_aclockwise.tail_idx = 0;
 
     semid = b_sem_get_id();
     b_sem_set(semid, SEM_BRIDGE, BRIDGE_LIMIT);
@@ -199,9 +212,6 @@ void init()
 
 void end_simulation()
 {
-    if (end) return;
-
-    end = 1;
     b_signal(-getpgrp(), SIGINT);
 
     if (zombie_thread)

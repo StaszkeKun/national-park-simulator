@@ -17,10 +17,12 @@ void handle_wake_up(int sig)
     (void)sig;
 }
 
+volatile sig_atomic_t kill_requested = 0;
 void handle_kill(int sig)
 {
     (void)sig;
-    end_simulation();
+    kill_requested = 1;
+    b_raise(SIG_WAKE_UP);
 }
 
 volatile sig_atomic_t leave_park = 0;
@@ -30,12 +32,14 @@ void handle_leave_park(int sig)
     leave_park = 1;
 }
 
-void kid_thread()
+void* kid_thread(void* arg)
 {
+    (void)arg;
     while(true)
     {
         pause();
     }
+    return NULL;
 }
 
 int semid;
@@ -63,7 +67,7 @@ int main()
 {
     init();
 
-    while(true)
+    while(!kill_requested)
     {
         operate();
     }
@@ -102,17 +106,20 @@ void init()
 
     srand(getpid() * time(NULL));
 
-    shared_data = b_shm_attach(b_shm_get_id(SHM_SHARED_DATA, sizeof(shared_data_t)));
-    visitors_data = b_shm_attach(b_shm_get_id(SHM_VISITOR_DATA, sizeof(visitor_data_t) * VISITORS_LIMIT));
-
-    fifo_regular = b_fifo_open(TICKET_REGULAR_PATH, O_WRONLY);
-    fifo_vip = b_fifo_open(TICKET_VIP_PATH, O_WRONLY);
-
-    msgid_cashier = b_msq_get_id(MSG_CASHIER);
-    msgid_guide = b_msq_get_id(MSG_GUIDES);
-
-    semid = b_sem_get_id();
-    myid = register_visitor();
+    if (!kill_requested)
+    {
+        shared_data = b_shm_attach(b_shm_get_id(SHM_SHARED_DATA, sizeof(shared_data_t)));
+        visitors_data = b_shm_attach(b_shm_get_id(SHM_VISITOR_DATA, sizeof(visitor_data_t) * VISITORS_LIMIT));
+    
+        fifo_regular = b_fifo_open(TICKET_REGULAR_PATH, O_WRONLY);
+        fifo_vip = b_fifo_open(TICKET_VIP_PATH, O_WRONLY);
+    
+        msgid_cashier = b_msq_get_id(MSG_CASHIER);
+        msgid_guide = b_msq_get_id(MSG_GUIDES);
+    
+        semid = b_sem_get_id();
+        myid = register_visitor();
+    }
 }
 
 void end_simulation()
@@ -168,7 +175,7 @@ void operate()
                 {
                     printf("[VIP %d]: moving to ferry\n", my_data->pid);
                     b_sleep(b_randf(GUIDES_MOVETIME_MIN, GUIDES_MOVETIME_MAX));
-                    my_data->status = VS_AT_FERRY_BOARDING;
+                    my_data->status = VS_AWAITING_FERRY_START;
                     break;
                 }
             }
@@ -207,7 +214,7 @@ void operate()
 
                     while(!check_if_first_secure(&shared_data->bridge_queue_clockwise, MUTEX_BRIDGE))
                     {
-                        printf("[VIP %d]: ain't first in line\n", my_data->pid);
+                        printf("[VIP %d]: is not first in line\n", my_data->pid);
                         b_wait_for_wakeup();
                         printf("[VTP %d]: wake up check if first\n", my_data->pid);
                     }
@@ -222,7 +229,7 @@ void operate()
 
                     while(!check_if_first_secure(&shared_data->bridge_queue_aclockwise, MUTEX_BRIDGE))
                     {
-                        printf("[VIP %d]: ain't first in line\n", my_data->pid);
+                        printf("[VIP %d]: is not first in line\n", my_data->pid);
                         b_wait_for_wakeup();
                         printf("[VTP %d]: wake up check if first\n", my_data->pid);
                     }
@@ -297,7 +304,7 @@ void operate()
 
                 if (vip_clockwise_track)
                 {
-                    printf("[VIP %d]: moving to cashier\n", my_data->pid);
+                    printf("[VIP %d]: moving to tower\n", my_data->pid);
                     b_sleep(b_randf(GUIDES_MOVETIME_MIN, GUIDES_MOVETIME_MAX));
                     my_data->status = VS_GOING_UP_TOWER;
                 }
@@ -357,7 +364,7 @@ void operate()
 
             ringbuffer_pop_front(&shared_data->tower_queue, NULL);
 
-            for(int i = 0; i < shared_data->tower_queue.count; i++)
+            for(size_t i = 0; i < shared_data->tower_queue.count; i++)
             {
                 pid_t new_first;
                 ringbuffer_at(&shared_data->tower_queue, 0, &new_first);
@@ -446,7 +453,7 @@ void operate()
 
                     while(!check_if_first_secure(&shared_data->ferry_vipqueue_clockwise, MUTEX_FERRY))
                     {
-                        printf("[VIP %d]: ain't first in line\n", my_data->pid);
+                        printf("[VIP %d]: is not first in line\n", my_data->pid);
                         b_wait_for_wakeup();
                         printf("[VIP %d]: wake up check if first\n", my_data->pid);
                     }
@@ -461,7 +468,7 @@ void operate()
 
                     while(!check_if_first_secure(&shared_data->ferry_vipqueue_aclockwise, MUTEX_FERRY))
                     {
-                        printf("[VIP %d]: aint first in line\n", my_data->pid);
+                        printf("[VIP %d]: is not first in line\n", my_data->pid);
                         b_wait_for_wakeup();
                         printf("[VIP %d]: wake up check if first\n", my_data->pid);
                     }
@@ -537,7 +544,7 @@ void operate()
 
                     for(int i = 1; i < shared_data->ferry_seats_taken; i++)
                     {
-                        b_signal(shared_data->ferry_seats[i], SIG_WAKE_UP);
+                        if (b_process_exist(shared_data->ferry_seats[i])) b_signal(shared_data->ferry_seats[i], SIG_WAKE_UP);
                     }
 
                     shared_data->ferry_seats_taken = 0;
@@ -601,11 +608,16 @@ void operate()
 
                 if (vip_clockwise_track)
                 {
-                    my_data->status = GS_MOVING_TO_CASH;
+                    printf("[VIP %d]: moving to cashier\n", my_data->pid);
+                    b_sleep(b_randf(GUIDES_MOVETIME_MIN, GUIDES_MOVETIME_MAX));
+                    b_msq_send(msgid_cashier, 2, my_data->pid);
+                    b_wait_for_wakeup();
                 }
                 else
                 {
-                    my_data->status = GS_MOVING_TO_TOWER;
+                    printf("[VIP %d]: moving to tower\n", my_data->pid);
+                    b_sleep(b_randf(GUIDES_MOVETIME_MIN, GUIDES_MOVETIME_MAX));
+                    my_data->status = VS_GOING_UP_TOWER;
                 }
             }
             else
@@ -638,6 +650,7 @@ int register_visitor()
     {
         if (id >= VISITORS_LIMIT)
         {
+            errno = EAGAIN;
             perror("[ERROR]: visitor didn't fit in visitor data shared memory");
             b_sem_v(semid, MUTEX_ALLOC_VISITOR, 1);
             end_simulation();
@@ -718,9 +731,9 @@ bool try_board_ferry_vip()
 {
     b_sem_p(semid, MUTEX_FERRY, 1);
 
-    if (shared_data->ferry_side != vip_clockwise_track && shared_data->ferry_seats_taken == 0);
+    if (shared_data->ferry_side != vip_clockwise_track && shared_data->ferry_seats_taken == 0)
     {
-        printf("[VIP %d] no one on the other side calling the ferry\n", my_data->pid);
+        printf("[VIP %d]: no one on the other side calling the ferry\n", my_data->pid);
         shared_data->ferry_side = 2;
         b_sleep(FERRY_VOYAGE_TIME);
         shared_data->ferry_side = vip_clockwise_track;
@@ -734,7 +747,7 @@ bool try_board_ferry_vip()
 
     if (b_sem_check(semid, SEM_FERRY) < 1)
     {
-        printf("[VIP %d] couldn't fit on ferry - alerting captain\n", my_data->pid);
+        printf("[VIP %d]: couldn't fit on ferry - alerting captain\n", my_data->pid);
         b_signal(shared_data->ferry_seats[0], SIG_WAKE_UP);
         b_sem_v(semid, MUTEX_FERRY, 1);
         return false;

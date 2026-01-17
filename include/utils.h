@@ -35,17 +35,17 @@ pid_t b_execute(char* path, char* arg1)
         if (execl(path, path, arg1, NULL) < 0)
         {
             perror("[ERROR]: execl error");
-            exit(EXIT_FAILURE);
+            _exit(EXIT_FAILURE);
         }
     }
 
     return new_pid;
 }
 
-pthread_t b_execute_thread(void(*func)())
+pthread_t b_execute_thread(void* (*func)(void *))
 {
     pthread_t tid;
-    if (pthread_create(&tid, NULL, (void*(*)(void*))func, NULL) < 0)
+    if (pthread_create(&tid, NULL, func, NULL) != 0)
     {
         perror("[ERROR]: execute thread error");
         exit(EXIT_FAILURE);
@@ -57,8 +57,9 @@ void b_signal(pid_t target, int signal)
 {
     if(kill(target, signal) < 0)
     {
-        char msg[50];
-        sprintf(msg, "[ERROR]: signal (%d) sending error to (%d)", signal, target);
+        if (errno = ESRCH) return;
+        char msg[64];
+        snprintf(msg, sizeof(msg), "[ERROR]: signal (%d) sending error to (%d)", signal, target);
         perror(msg);
     }
 }
@@ -80,10 +81,12 @@ void b_wait_for_wakeup()
 bool b_process_exist(pid_t pid)
 {
     if (pid <= 0) return false;
-    kill(pid, 0);
-    if (errno == ESRCH)
+    if (kill(pid, 0) == -1)
     {
-        return false;
+        if (errno == ESRCH)
+        {
+            return false;
+        }
     }
     return true;
 }
@@ -154,12 +157,29 @@ double b_get_time_of_day(double start_time)
 
 float b_randf(float min, float max)
 {
+    if (min >= max) return min;
     return min + (float)rand() / RAND_MAX * (max-min);
 }
 
 int b_randi(int min, int max)
 {
-    return min + rand() % (max - min);
+    if (min >= max) return min;
+
+    int range = max - min;
+    if (range > RAND_MAX)
+    {
+        errno = EINVAL;
+        perror("[ERROR]: used b_randi with too big range, will return min specified");
+        return min;
+    }
+    int limit = RAND_MAX - (RAND_MAX % range);
+    int r;
+
+    do {
+        r = rand();
+    } while (r >= limit);
+
+    return min + (r % range);
 }
 
 visitor_data_t* b_get_visitor_by_pid(visitor_data_t* visitor_data_array, pid_t searched_pid)
@@ -193,7 +213,7 @@ int b_shm_get_id_ifexist(int id, size_t size)
     int shmid = shmget(_get_key('M'+id), size, 0);
     if (shmid == -1)
     {
-        if (errno = ENOENT)
+        if (errno == ENOENT)
         {
             printf("specified shared memory doesn't exist\n");
             return -1;
@@ -216,7 +236,7 @@ void b_shm_remove(int shmid)
 void* b_shm_attach(int shmid)
 {
     void* ptr = shmat(shmid, 0, 0);
-    if (ptr < 0)
+    if (ptr == (void*)-1)
     {
         perror("[ERROR]: Shared memory attach error");
         exit(EXIT_FAILURE);
@@ -342,7 +362,7 @@ long b_msq_receive(int msqid, long type)
     {
         if (errno == EINTR)
         {
-            return b_msq_receive(msqid, type);
+            return -1;
         }
         perror("[ERROR]: message queue receive error");
         exit(EXIT_FAILURE);

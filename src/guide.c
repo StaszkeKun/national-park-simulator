@@ -30,10 +30,11 @@ double update_time;
 bool clockwise_track = true;
 bool ferry_leader = false;
 
+volatile sig_atomic_t kill_requested = 0;
 void handle_kill(int sig)
 {
     (void)sig;
-    end_simulation();
+    kill_requested = 1;
 }
 
 void handle_wake_up(int sig)
@@ -49,9 +50,6 @@ void handle_leave_park(int sig)
 void handle_leave_tower(int sig)
 {
     (void)sig;
-    char* msg[64];
-    sprintf(*msg, "[GUIDE %d]: received SIG_LEAVE_TOWER signal\n", my_id);
-    write(1, msg, sizeof(msg));
     for(int i = 0; i < my_data->group_count; i++)
     {
         b_signal(my_data->groups[i]->pid, SIG_LEAVE_TOWER);
@@ -75,7 +73,7 @@ int main(int argc, char *argv[])
     
     init();
 
-    while(true)
+    while(!kill_requested)
     {
         operate();
     }
@@ -170,6 +168,7 @@ void operate()
                 if (visitors_in_group >= GROUP_SIZE) break;
                 if (visitors_in_group > 0 && b_get_time_of_day(shared_data->start_time) > OPEN_TIME) break;
                 if (visitors_in_group > 0 && b_tick() - update_time > GUIDES_GATHER_WAIT) break;
+                if (kill_requested) break;
 
                 double now = b_get_time_of_day(shared_data->start_time);
                 if (now > OPEN_TIME)
@@ -244,7 +243,7 @@ void operate()
 
                 while(!check_if_first_secure(&shared_data->bridge_queue_clockwise, MUTEX_BRIDGE))
                 {
-                    printf("[GUIDE %d]: ain't first in line\n", my_id);
+                    printf("[GUIDE %d]: is not first in line\n", my_id);
                     b_wait_for_wakeup();
                     printf("[GUIDE %d]: wake up check if first\n", my_id);
                 }
@@ -259,7 +258,7 @@ void operate()
 
                 while(!check_if_first_secure(&shared_data->bridge_queue_aclockwise, MUTEX_BRIDGE))
                 {
-                    printf("[GUIDE %d]: ain't first in line\n", my_id);
+                    printf("[GUIDE %d]: is not first in line\n", my_id);
                     b_wait_for_wakeup();
                     printf("[GUIDE %d]: wake up check if first\n", my_id);
                 }
@@ -307,9 +306,11 @@ void operate()
 
             b_sem_p(semid, MUTEX_BRIDGE, 1);
 
+            if (kill_requested) break;
             while(visitors_checkins < visitors_in_group)
             {
                 long message = b_msq_receive(msgid_guide, my_id + 1);
+                if (kill_requested) break;
                 visitors_checkins += message;
                 printf("[GUIDE %d]: waiting for group to cross %d/%d\n", my_id, visitors_checkins, visitors_in_group);
             }
@@ -363,9 +364,11 @@ void operate()
 
             visitors_checkins = 0;
 
+            if (kill_requested) break;
             while(visitors_checkins < visitors_in_group)
             {
                 long msg = b_msq_receive(msgid_guide, my_id+1);
+                if (kill_requested) break;
                 visitors_checkins += msg;
                 printf("[GUIDE %d]: waiting fo group to sightsee tower %d/%d\n", my_id, visitors_checkins, visitors_in_group);
             }
@@ -396,7 +399,7 @@ void operate()
 
                 while(!check_if_first_secure(&shared_data->ferry_queue_clockwise, MUTEX_FERRY) && shared_data->ferry_vipqueue_clockwise.count == 0)
                 {
-                    printf("[GUIDE %d]: ain't first in line\n", my_id);
+                    printf("[GUIDE %d]: is not first in line\n", my_id);
                     b_wait_for_wakeup();
                     printf("[GUIDE %d]: wake up check if first\n", my_id);
                 }
@@ -411,7 +414,7 @@ void operate()
 
                 while(!check_if_first_secure(&shared_data->ferry_queue_aclockwise, MUTEX_FERRY) && shared_data->ferry_vipqueue_aclockwise.count == 0)
                 {
-                    printf("[GUIDE %d]: aint first in line\n", my_id);
+                    printf("[GUIDE %d]: is not first in line\n", my_id);
                     b_wait_for_wakeup();
                     printf("[GUIDE %d]: wake up check if first\n", my_id);
                 }
@@ -461,9 +464,11 @@ void operate()
             }
 
             visitors_checkins = 0;
+            if (kill_requested) break;
             while(visitors_checkins < visitors_in_group)
             {
                 long checkin = b_msq_receive(msgid_guide, my_id + 1);
+                if (kill_requested) break;
                 visitors_checkins += checkin;
                 printf("[GUIDE %d]: waiting for group to board %d/%d\n", my_id, visitors_checkins, visitors_in_group);
             }
@@ -496,7 +501,7 @@ void operate()
 
                 for(int i = 1; i < shared_data->ferry_seats_taken; i++)
                 {
-                    b_signal(shared_data->ferry_seats[i], SIG_WAKE_UP);
+                    if (b_process_exist(shared_data->ferry_seats[i])) b_signal(shared_data->ferry_seats[i], SIG_WAKE_UP);
                 }
 
                 shared_data->ferry_seats_taken = 0;
@@ -533,10 +538,11 @@ void operate()
             for(int i = 0; i < my_data->group_count; i++) b_signal(my_data->groups[i]->pid, SIG_WAKE_UP);
 
             visitors_checkins = 0;
-
+            if (kill_requested) break;
             while(visitors_checkins < visitors_in_group)
             {
                 long msg = b_msq_receive(msgid_guide, my_id+1);
+                if (kill_requested) break;
                 visitors_checkins += msg;
                 printf("[GUIDE %d]: waiting fo group to disboard %d/%d\n", my_id, visitors_checkins, visitors_in_group);
             }
@@ -662,9 +668,9 @@ bool try_board_ferry()
 {
     b_sem_p(semid, MUTEX_FERRY, 1);
 
-    if (shared_data->ferry_side != clockwise_track && shared_data->ferry_seats_taken == 0);
+    if (shared_data->ferry_side != clockwise_track && shared_data->ferry_seats_taken == 0)
     {
-        printf("[GUIDE %d] no one on the other side calling the ferry\n", my_id);
+        printf("[GUIDE %d]: no one on the other side calling the ferry\n", my_id);
         b_sleep(FERRY_VOYAGE_TIME);
         shared_data->ferry_side = clockwise_track;
     }
@@ -677,7 +683,7 @@ bool try_board_ferry()
 
     if (b_sem_check(semid, SEM_FERRY) < 1 + visitors_in_group)
     {
-        printf("[GUIDE %d] couldn't fit on ferry - alerting captain\n", my_id);
+        printf("[GUIDE %d]: couldn't fit on ferry - alerting captain\n", my_id);
         b_signal(shared_data->ferry_seats[0], SIG_WAKE_UP);
         b_sem_v(semid, MUTEX_FERRY, 1);
         return false;

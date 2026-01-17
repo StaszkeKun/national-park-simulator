@@ -32,8 +32,7 @@ int main()
     printf("exit CLI: type `exit`\n");
     printf("available guide ids: 0 - %d\n", GUIDES_NUMBER-1);
 
-    int n = snprintf(NULL, 0, "%d", GUIDES_NUMBER-1);
-    char choice[8 + n]; // 5 letter word + space + n(guide number) + \n + \0
+    char choice[32];
     while(true)
     {
         printf("> ");
@@ -42,8 +41,6 @@ int main()
             printf("fgets error... exiting\n");
             break;
         }
-
-        //choice[strcspn(choice, "\n")] = '\0';
 
         if (strcmp(choice, "exit\n") == 0)
         {

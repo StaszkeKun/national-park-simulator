@@ -17,6 +17,7 @@ void ringbuffer_push_back(ringbuffer_t* buf, pid_t new_element)
 {
     if (buf->count >= buf->capacity)
     {
+        errno = EAGAIN;
         perror("[ERROR]: tried to push into a full ringbuffer");
         return;
     }
@@ -46,6 +47,7 @@ void ringbuffer_at(ringbuffer_t* buf, size_t pos, pid_t* out_element)
 {
     if (pos >= buf->capacity)
     {
+        errno = EINVAL;
         perror("[ERROR]: tried to check ringbuffer out of bounds");
         return;
     }

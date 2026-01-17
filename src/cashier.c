@@ -25,8 +25,9 @@ bool setup_today = false;
 unsigned int day = 0;
 
 pthread_t leaving_thread = 0;
-void print_leaving()
+void* print_leaving(void* arg)
 {
+    (void)arg;
     visitor_data_t* visitor_data;
     while(true)
     {
@@ -45,6 +46,7 @@ void print_leaving()
             b_signal(visitor_pid, SIG_WAKE_UP);
         }
     }
+    return NULL;
 }
 
 void handle_wake_up(int sig)
@@ -52,17 +54,18 @@ void handle_wake_up(int sig)
     (void)sig;
 }
 
+volatile sig_atomic_t kill_requsted = 0;
 void handle_kill(int sig)
 {
     (void)sig;
-    end_simulation();
+    kill_requsted = 1;
 }
 
 int main()
 {
     init();
 
-    while(true)
+    while(!kill_requsted)
     {
         if (b_get_time_of_day(shared_data->start_time) <= OPEN_TIME && !setup_today)
         {
@@ -269,7 +272,7 @@ void log_today()
         printf("[LOG ERROR BACKUP]: gold earned: %d\n", gold_today);
         printf("[LOG ERROR BACKUP]: visitors today: %d\n", visitors_today);
         printf("[LOG ERROR BACKUP]: visitors today:\n");
-        for(int i = 0; i < visitors_today; i++)
+        for(unsigned int i = 0; i < visitors_today; i++)
         {
             printf("[LOG ERROR BACKUP]: %ld", visitors_pids[i]);
         }
@@ -280,7 +283,7 @@ void log_today()
     fprintf(file, "gold earned: %d\n", gold_today);
     fprintf(file, "visitors today: %d\n", visitors_today);
     fprintf(file, "visitors today:\n");
-    for(int i = 0; i < visitors_today; i++)
+    for(unsigned int i = 0; i < visitors_today; i++)
     {
         fprintf(file, "%ld\n", visitors_pids[i]);
     }

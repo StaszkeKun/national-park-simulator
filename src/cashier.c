@@ -35,13 +35,13 @@ void* print_leaving(void* arg)
         visitor_data = b_get_visitor_by_pid(visitors_data, visitor_pid);
         if (visitor_data->isVIP)
         {
-            printf("[CASHIER]: VIP %ld left\n", visitor_pid);
+            //printf("[CASHIER]: VIP %ld left\n", visitor_pid);
             visitor_data->status = VS_LEAVING;
             b_signal(visitor_pid, SIG_WAKE_UP);
         }
         else
         {
-            printf("[CASHIER]: Visitor %ld with %d kids left\n", visitor_pid, visitor_data->kids_count);
+            //printf("[CASHIER]: Visitor %ld with %d kids left\n", visitor_pid, visitor_data->kids_count);
             visitor_data->status = VS_LEAVING;
             b_signal(visitor_pid, SIG_WAKE_UP);
         }
@@ -54,18 +54,18 @@ void handle_wake_up(int sig)
     (void)sig;
 }
 
-volatile sig_atomic_t kill_requsted = 0;
+volatile sig_atomic_t kill_requested = 0;
 void handle_kill(int sig)
 {
     (void)sig;
-    kill_requsted = 1;
+    kill_requested = 1;
 }
 
 int main()
 {
     init();
 
-    while(!kill_requsted)
+    while(!kill_requested)
     {
         if (b_get_time_of_day(shared_data->start_time) <= OPEN_TIME && !setup_today)
         {
@@ -101,17 +101,17 @@ int main()
         
         if (b_get_time_of_day(shared_data->start_time) > OPEN_TIME)
         {
-            printf("[CASHIER]: Visitor %d with %d kids dismissed - closing hours\n", current_pid, current_visitor_data->kids_count);
+            //printf("[CASHIER]: Visitor %d with %d kids dismissed - closing hours\n", current_pid, current_visitor_data->kids_count);
             current_visitor_data->status = VS_LEAVING;
-            b_signal(current_pid, SIG_WAKE_UP);
+            b_signal(current_pid, SIGINT);
             continue;
         }
 
-        if (1 + current_visitor_data->kids_count + visitors_today >= VISITORS_LIMIT)
+        if (1 + current_visitor_data->kids_count + visitors_today > VISITORS_LIMIT)
         {
-            printf("[CASHIER]: Visitor %d with %d kids dismissed - daily visitor limit\n", current_pid, current_visitor_data->kids_count);
+            //printf("[CASHIER]: Visitor %d with %d kids dismissed - daily visitor limit\n", current_pid, current_visitor_data->kids_count);
             current_visitor_data->status = VS_LEAVING;
-            b_signal(current_pid, SIG_WAKE_UP);
+            b_signal(current_pid, SIGINT);
             continue;
         }
 
@@ -198,14 +198,14 @@ bool wait_for_visitor()
 
 void sell_ticket(visitor_data_t* visitor_data)
 {
-    b_sleep(TICKET_SALE_TIME);
+    b_sleep(TICKET_SALE_TIME, (volatile sig_atomic_t*[]){&kill_requested}, 1);
 
     int sum = 0;
     int sold = 0;
     if (visitor_data->isVIP)
     {
         b_signal(visitor_data->pid, SIG_WAKE_UP);
-        printf("[CASHIER]: let VIP %d in\n", visitor_data->pid);
+        //printf("[CASHIER]: let VIP %d in\n", visitor_data->pid);
         visitors_pids[visitors_today] = visitor_data->pid;
         visitors_today++;
         visitor_data->status = VS_AWAITING_GUIDE; //this tells VIP to choose a direction and start going by themselves
@@ -230,11 +230,11 @@ void sell_ticket(visitor_data_t* visitor_data)
 
     gold_today += sum;
 
-    printf("[CASHIER]: sold %d ticket(s) to %d with %d kids\n", sold, visitor_data->pid, visitor_data->kids_count);
-    printf("[CASHIER]: let visitor %d in\n", visitor_data->pid);
+    //printf("[CASHIER]: sold %d ticket(s) to %d with %d kids\n", sold, visitor_data->pid, visitor_data->kids_count);
+    //printf("[CASHIER]: let visitor %d in\n", visitor_data->pid);
     for(int i = 0; i < visitor_data->kids_count; i++)
     {
-        printf("[CASHIER]: let kid %ld in under visitor %d protection\n", visitor_data->kids[i].tid, visitor_data->pid);
+        //printf("[CASHIER]: let kid %ld in under visitor %d protection\n", visitor_data->kids[i].tid, visitor_data->pid);
     }
     visitor_data->status = VS_AWAITING_GUIDE;
     b_msq_send(msgid, 1, visitor_data->pid);
@@ -268,15 +268,15 @@ void log_today()
     if(file == NULL)
     {
         perror("[ERROR]: logging error");
-        printf("[LOG ERROR BACKUP]: day: %d\n", day);
-        printf("[LOG ERROR BACKUP]: gold earned: %d\n", gold_today);
-        printf("[LOG ERROR BACKUP]: visitors today: %d\n", visitors_today);
-        printf("[LOG ERROR BACKUP]: visitors today:\n");
+        //printf("[LOG ERROR BACKUP]: day: %d\n", day);
+        //printf("[LOG ERROR BACKUP]: gold earned: %d\n", gold_today);
+        //printf("[LOG ERROR BACKUP]: visitors today: %d\n", visitors_today);
+        //printf("[LOG ERROR BACKUP]: visitors today:\n");
         for(unsigned int i = 0; i < visitors_today; i++)
         {
-            printf("[LOG ERROR BACKUP]: %ld", visitors_pids[i]);
+            //printf("[LOG ERROR BACKUP]: %ld", visitors_pids[i]);
         }
-        printf("[LOG ERROR BACKUP]: end");
+        //printf("[LOG ERROR BACKUP]: end");
         return;
     }
 

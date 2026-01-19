@@ -10,6 +10,7 @@
 #include <sys/msg.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <semaphore.h>
 #include "types.h"
 #include "constants.h"
 
@@ -74,7 +75,7 @@ void b_wait_for_wakeup()
     sigset_t mask;
     sigemptyset(&mask);
     sigaddset(&mask, SIG_WAKE_UP);
-    
+
     sigwaitinfo(&mask, NULL);
 }
 
@@ -91,7 +92,7 @@ bool b_process_exist(pid_t pid)
     return true;
 }
 
-void b_sleep(double time)
+void b_sleep(double time, volatile sig_atomic_t** cond, int cond_n)
 {
     if (time <= 0.0) return;
 
@@ -105,29 +106,9 @@ void b_sleep(double time)
         tv.tv_nsec -= 1000000000L;
     }
 
-    while (nanosleep(&tv, &rem) == -1)
+    for(int i = 0; i < cond_n; i++)
     {
-        if (errno != EINTR)
-        {
-            perror("[ERROR]: sleep error");
-            exit(EXIT_FAILURE);
-        }
-        tv = rem;
-    }
-}
-
-void b_sleep_cond(double time, volatile sig_atomic_t* cond)
-{
-    if (time <= 0.0) return;
-
-    struct timespec tv, rem;
-    tv.tv_sec = (time_t)time;
-    tv.tv_nsec = (long)((time - tv.tv_sec) * 1e9);
-
-    if (tv.tv_nsec >= 1000000000L)
-    {
-        tv.tv_sec++;
-        tv.tv_nsec -= 1000000000L;
+        if (*cond[i]) return;
     }
 
     while (nanosleep(&tv, &rem) == -1)
@@ -137,8 +118,11 @@ void b_sleep_cond(double time, volatile sig_atomic_t* cond)
             perror("[ERROR]: sleep error");
             exit(EXIT_FAILURE);
         }
+        for (int i = 0; i < cond_n; i++)
+        {
+            if (*cond[i]) return;
+        }
         tv = rem;
-        if (*cond == 1) break;
     }
 }
 
@@ -253,6 +237,33 @@ void b_shm_dettach(void* addr)
     }
 }
 
+//thread semaphores
+void b_t_sem_v(sem_t *sem)
+{
+    if (sem_post(sem) == -1)
+    {
+        perror("[ERROR]: T_Semaphore V error");
+    }
+}
+
+void b_t_sem_p(sem_t *sem, volatile sig_atomic_t** cond, int cond_n)
+{
+    if (sem_wait(sem) == -1)
+    {
+        if (errno == EINTR)
+        {
+            for(int i = 0; i < cond_n; i++)
+            {
+                if (*cond[i]) return;
+            }
+            b_t_sem_p(sem, cond, cond_n);
+            return;
+        }
+        perror("[ERROR]: T_Semaphore P error");
+        exit(EXIT_FAILURE);
+    }
+}
+
 //semaphores
 int b_sem_get_id()
 {
@@ -298,7 +309,7 @@ void b_sem_v(int semid, int semnum, int val)
     op.sem_num = semnum;
     op.sem_op = val;
     op.sem_flg = 0;
-
+    
     if (semop(semid, &op, 1) < 0)
     {
         perror("[ERROR]: Semaphore V operation error");
@@ -306,18 +317,27 @@ void b_sem_v(int semid, int semnum, int val)
     }
 }
 
-void b_sem_p(int semid, int semnum, int val)
+void b_sem_p(int semid, int semnum, int val, volatile sig_atomic_t** cond, int cond_n)
 {
     struct sembuf op;
     op.sem_num = semnum;
     op.sem_op = -val;
     op.sem_flg = 0;
 
+    for(int i = 0; i < cond_n; i++)
+    {
+        if (*cond[i]) return;
+    }
+
     if (semop(semid, &op, 1) < 0)
     {
         if (errno == EINTR)
         {
-            b_sem_p(semid, semnum, val);
+            for(int i = 0; i < cond_n; i++)
+            {
+                if (*cond[i]) return;
+            }
+            b_sem_p(semid, semnum, val, cond, cond_n);
             return;
         }
         perror("[ERROR]: Semaphore P operation error");

@@ -35,6 +35,7 @@ void handle_kill(int sig)
 {
     (void)sig;
     kill_requested = 1;
+    b_raise(SIG_WAKE_UP);
 }
 
 void handle_wake_up(int sig)
@@ -170,14 +171,17 @@ void operate()
                 if (visitors_in_group > 0 && b_tick() - update_time > GUIDES_GATHER_WAIT) break;
                 if (kill_requested) break;
 
-                double now = b_get_time_of_day(shared_data->start_time);
-                if (now > OPEN_TIME)
+                if (visitor_pid == -1)
                 {
-                    b_sleep(CYCLE_TIME - now);
-                }
-                else
-                {
-                    b_sleep(GUIDES_GATHER_CHECK_INTERVAL);
+                    double now = b_get_time_of_day(shared_data->start_time);
+                    if (now > OPEN_TIME)
+                    {
+                        b_sleep(CYCLE_TIME - now, (volatile sig_atomic_t* []){&kill_requested}, 1);
+                    }
+                    else
+                    {
+                        b_sleep(GUIDES_GATHER_CHECK_INTERVAL, (volatile sig_atomic_t* []){&kill_requested}, 1);
+                    }
                 }
             }
 
@@ -235,8 +239,8 @@ void operate()
 
             if (clockwise_track)
             {
-                printf("[GUIDE %d]: tires adding to bridge queue\n", my_id);
-                b_sem_p(semid, MUTEX_BRIDGE, 1);
+                printf("[GUIDE %d]: tries adding to bridge queue\n", my_id);
+                b_sem_p(semid, MUTEX_BRIDGE, 1, (volatile sig_atomic_t* []){&kill_requested}, 1);
                 ringbuffer_push_back(&shared_data->bridge_queue_clockwise, my_data->pid);
                 printf("[GUIDE %d]: joined queue at bridge\n", my_id);
                 b_sem_v(semid, MUTEX_BRIDGE, 1);
@@ -246,12 +250,13 @@ void operate()
                     printf("[GUIDE %d]: is not first in line\n", my_id);
                     b_wait_for_wakeup();
                     printf("[GUIDE %d]: wake up check if first\n", my_id);
+                    if(kill_requested) break;
                 }
             }
             else
             {
-                printf("[GUIDE %d]: tires adding to bridge queue\n", my_id);
-                b_sem_p(semid, MUTEX_BRIDGE, 1);
+                printf("[GUIDE %d]: tries adding to bridge queue\n", my_id);
+                b_sem_p(semid, MUTEX_BRIDGE, 1, (volatile sig_atomic_t* []){&kill_requested}, 1);
                 ringbuffer_push_back(&shared_data->bridge_queue_aclockwise, my_data->pid);
                 printf("[GUIDE %d]: joined queue at bridge\n", my_id);
                 b_sem_v(semid, MUTEX_BRIDGE, 1);
@@ -261,6 +266,7 @@ void operate()
                     printf("[GUIDE %d]: is not first in line\n", my_id);
                     b_wait_for_wakeup();
                     printf("[GUIDE %d]: wake up check if first\n", my_id);
+                    if(kill_requested) break;
                 }
             }
 
@@ -269,9 +275,10 @@ void operate()
                 printf("[GUIDE %d]: couldn't pass\n", my_id);
                 b_wait_for_wakeup();
                 printf("[GUIDE %d]: wake up trypass\n", my_id);
+                if(kill_requested) break;
             }
 
-            b_sem_p(semid, MUTEX_BRIDGE, 1);
+            b_sem_p(semid, MUTEX_BRIDGE, 1, (volatile sig_atomic_t* []){&kill_requested}, 1);
 
             printf("[GUIDE %d]: started crossing bridge\n", my_id);
             if (clockwise_track)
@@ -297,24 +304,29 @@ void operate()
 
             b_sem_v(semid, MUTEX_BRIDGE, 1);
 
-            b_sleep(shared_data->bridge_crosstime);
+            b_sleep(shared_data->bridge_crosstime, (volatile sig_atomic_t* []){&kill_requested}, 1);
             printf("[GUIDE %d]: crossed bridge\n", my_id);
 
             b_sem_v(semid, SEM_BRIDGE, 1);
 
             visitors_checkins = 0;
 
-            b_sem_p(semid, MUTEX_BRIDGE, 1);
+            for(int i = 0; i < my_data->group_count; i++)
+            {
+                b_signal(my_data->groups[i]->pid, SIG_WAKE_UP);
+            }
 
             if (kill_requested) break;
             while(visitors_checkins < visitors_in_group)
             {
+                printf("%dand started waiting\n", my_id);
                 long message = b_msq_receive(msgid_guide, my_id + 1);
                 if (kill_requested) break;
                 visitors_checkins += message;
                 printf("[GUIDE %d]: waiting for group to cross %d/%d\n", my_id, visitors_checkins, visitors_in_group);
             }
 
+            b_sem_p(semid, MUTEX_BRIDGE, 1, (volatile sig_atomic_t* []){&kill_requested}, 1);
             shared_data->groups_on_bridge--;
             if (clockwise_track)
             {
@@ -364,9 +376,15 @@ void operate()
 
             visitors_checkins = 0;
 
+            for(int i = 0; i < my_data->group_count; i++)
+            {
+                b_signal(my_data->groups[i]->pid, SIG_WAKE_UP);
+            }
+
             if (kill_requested) break;
             while(visitors_checkins < visitors_in_group)
             {
+                printf("%dand started waiting\n", my_id);
                 long msg = b_msq_receive(msgid_guide, my_id+1);
                 if (kill_requested) break;
                 visitors_checkins += msg;
@@ -391,43 +409,49 @@ void operate()
 
             if (clockwise_track)
             {
-                printf("[GUIDE %d]: tires adding to ferry queue\n", my_id);
-                b_sem_p(semid, MUTEX_FERRY, 1);
+                printf("[GUIDE %d]: tries adding to ferry queue\n", my_id);
+                b_sem_p(semid, MUTEX_FERRY, 1, (volatile sig_atomic_t* []){&kill_requested}, 1);
                 ringbuffer_push_back(&shared_data->ferry_queue_clockwise, my_data->pid);
                 printf("[GUIDE %d]: joined queue at ferry\n", my_id);
                 b_sem_v(semid, MUTEX_FERRY, 1);
 
+                if(kill_requested) break;
                 while(!check_if_first_secure(&shared_data->ferry_queue_clockwise, MUTEX_FERRY) && shared_data->ferry_vipqueue_clockwise.count == 0)
                 {
                     printf("[GUIDE %d]: is not first in line\n", my_id);
                     b_wait_for_wakeup();
                     printf("[GUIDE %d]: wake up check if first\n", my_id);
+                    if(kill_requested) break;
                 }
             }
             else
             {
-                printf("[GUIDE %d]: tires adding to ferry queue\n", my_id);
-                b_sem_p(semid, MUTEX_FERRY, 1);
+                printf("[GUIDE %d]: tries adding to ferry queue\n", my_id);
+                b_sem_p(semid, MUTEX_FERRY, 1, (volatile sig_atomic_t* []){&kill_requested}, 1);
                 ringbuffer_push_back(&shared_data->ferry_queue_aclockwise, my_data->pid);
                 printf("[GUIDE %d]: joined queue at ferry\n", my_id);
                 b_sem_v(semid, MUTEX_FERRY, 1);
 
+                if(kill_requested) break;
                 while(!check_if_first_secure(&shared_data->ferry_queue_aclockwise, MUTEX_FERRY) && shared_data->ferry_vipqueue_aclockwise.count == 0)
                 {
                     printf("[GUIDE %d]: is not first in line\n", my_id);
                     b_wait_for_wakeup();
                     printf("[GUIDE %d]: wake up check if first\n", my_id);
+                    if(kill_requested) break;
                 }
             }
 
+            if(kill_requested) break;
             while(!try_board_ferry())
             {
                 printf("[GUIDE %d]: couldnt board\n", my_id);
                 b_wait_for_wakeup();
                 printf("[GUIDE %d]: wake up tryboard\n", my_id);
+                if(kill_requested) break;
             }
 
-            b_sem_p(semid, MUTEX_FERRY, 1);
+            b_sem_p(semid, MUTEX_FERRY, 1, (volatile sig_atomic_t* []){&kill_requested}, 1);
 
             printf("[GUIDE %d]: boarded ferry\n", my_id);
             if (clockwise_track)
@@ -463,40 +487,55 @@ void operate()
                 }
             }
 
+            b_sem_v(semid, MUTEX_FERRY, 1);
+
             visitors_checkins = 0;
+
+            for(int i = 0; i < my_data->group_count; i++)
+            {
+                b_signal(my_data->groups[i]->pid, SIG_WAKE_UP);
+            }
+
             if (kill_requested) break;
             while(visitors_checkins < visitors_in_group)
             {
+                printf("%dand started waiting\n", my_id);
                 long checkin = b_msq_receive(msgid_guide, my_id + 1);
                 if (kill_requested) break;
                 visitors_checkins += checkin;
                 printf("[GUIDE %d]: waiting for group to board %d/%d\n", my_id, visitors_checkins, visitors_in_group);
             }
 
+            b_sem_p(semid, MUTEX_FERRY, 1, (volatile sig_atomic_t* []){&kill_requested}, 1);
+
             shared_data->ferry_groups_boarded++;
             printf("[GUIDE %d]: group boarded\n", my_id);
 
-            b_sem_v(semid, MUTEX_FERRY, 1);
 
             if (ferry_leader)
             {
                 if (clockwise_track && (shared_data->ferry_queue_clockwise.count != 0 || shared_data->ferry_vipqueue_clockwise.count != 0))
                 {
+                    b_sem_v(semid, MUTEX_FERRY, 1);
                     printf("[GUIDE %d - ferry captain]: waiting for more passangers\n", my_id);
                     b_wait_for_wakeup();
+                    if (kill_requested) break;
                 }
                 else if (!clockwise_track && (shared_data->ferry_queue_aclockwise.count != 0 || shared_data->ferry_vipqueue_aclockwise.count != 0))
                 {
+                    b_sem_v(semid, MUTEX_FERRY, 1);
                     printf("[GUIDE %d - ferry captain]: waiting for more passangers\n", my_id);
                     b_wait_for_wakeup();
+                    if (kill_requested) break;
                 }
+                else b_sem_v(semid, MUTEX_FERRY, 1);
 
-                b_sem_p(semid, MUTEX_FERRY, 1);
+                b_sem_p(semid, MUTEX_FERRY, 1, (volatile sig_atomic_t* []){&kill_requested}, 1);
 
                 shared_data->ferry_side = 2;
 
                 printf("[GUIDE %d - ferry captain]: ferry starts\n", my_id);
-                b_sleep(FERRY_VOYAGE_TIME);
+                b_sleep(FERRY_VOYAGE_TIME, (volatile sig_atomic_t* []){&kill_requested}, 1);
                 printf("[GUIDE %d - ferry captain]: ferry stops\n", my_id);
 
                 for(int i = 1; i < shared_data->ferry_seats_taken; i++)
@@ -511,8 +550,6 @@ void operate()
             }
             else
             {
-                b_sem_p(semid, MUTEX_FERRY, 1);
-                
                 if (clockwise_track)
                 {
                     if (shared_data->ferry_queue_clockwise.count == 0 && shared_data->ferry_vipqueue_clockwise.count == 0)
@@ -533,14 +570,22 @@ void operate()
 
                 b_sem_v(semid, MUTEX_FERRY, 1);
                 b_wait_for_wakeup();
+                if (kill_requested) break;
             }
 
             for(int i = 0; i < my_data->group_count; i++) b_signal(my_data->groups[i]->pid, SIG_WAKE_UP);
 
             visitors_checkins = 0;
+
+            for(int i = 0; i < my_data->group_count; i++)
+            {
+                b_signal(my_data->groups[i]->pid, SIG_WAKE_UP);
+            }
+
             if (kill_requested) break;
             while(visitors_checkins < visitors_in_group)
             {
+                printf("%dand started waiting\n", my_id);
                 long msg = b_msq_receive(msgid_guide, my_id+1);
                 if (kill_requested) break;
                 visitors_checkins += msg;
@@ -628,14 +673,14 @@ void move()
 
     if (group_slowed) move_time *= 1.5;
 
-    b_sleep(move_time);
+    b_sleep(move_time, (volatile sig_atomic_t* []){&kill_requested}, 1);
 
     printf("[GUIDE %d]: finished moving\n", my_id);
 }
 
 bool try_pass_bridge()
 {
-    b_sem_p(semid, MUTEX_BRIDGE, 1);
+    b_sem_p(semid, MUTEX_BRIDGE, 1, (volatile sig_atomic_t* []){&kill_requested}, 1);
 
     if (shared_data->bridge_direction != clockwise_track)
     {
@@ -652,7 +697,7 @@ bool try_pass_bridge()
 
     shared_data->groups_on_bridge++;
 
-    b_sem_p(semid, SEM_BRIDGE, 1);
+    b_sem_p(semid, SEM_BRIDGE, 1, (volatile sig_atomic_t* []){&kill_requested}, 1);
 
     for(int i = 0; i < my_data->group_count; i++)
     {
@@ -666,12 +711,12 @@ bool try_pass_bridge()
 
 bool try_board_ferry()
 {
-    b_sem_p(semid, MUTEX_FERRY, 1);
+    b_sem_p(semid, MUTEX_FERRY, 1, (volatile sig_atomic_t* []){&kill_requested}, 1);
 
     if (shared_data->ferry_side != clockwise_track && shared_data->ferry_seats_taken == 0)
     {
         printf("[GUIDE %d]: no one on the other side calling the ferry\n", my_id);
-        b_sleep(FERRY_VOYAGE_TIME);
+        b_sleep(FERRY_VOYAGE_TIME, (volatile sig_atomic_t* []){&kill_requested}, 1);
         shared_data->ferry_side = clockwise_track;
     }
 
@@ -681,7 +726,7 @@ bool try_board_ferry()
         return false;
     }
 
-    if (b_sem_check(semid, SEM_FERRY) < 1 + visitors_in_group)
+    if (b_sem_check(semid, SEM_FERRY) < 1 + visitors_in_group  || shared_data->ferry_seats_taken >= FERRY_LIMIT)
     {
         printf("[GUIDE %d]: couldn't fit on ferry - alerting captain\n", my_id);
         b_signal(shared_data->ferry_seats[0], SIG_WAKE_UP);
@@ -689,7 +734,7 @@ bool try_board_ferry()
         return false;
     }
 
-    b_sem_p(semid, SEM_FERRY, 1 + visitors_in_group);
+    b_sem_p(semid, SEM_FERRY, 1 + visitors_in_group, (volatile sig_atomic_t* []){&kill_requested}, 1);
 
     shared_data->ferry_seats[shared_data->ferry_seats_taken] = my_data->pid;
 
@@ -710,7 +755,7 @@ bool try_board_ferry()
 
 bool check_if_first_secure(void* buf, int mutex)
 {
-    b_sem_p(semid, mutex, 1);
+    b_sem_p(semid, mutex, 1, (volatile sig_atomic_t* []){&kill_requested}, 1);
 
     pid_t first_element;
     ringbuffer_at(buf, 0, &first_element);

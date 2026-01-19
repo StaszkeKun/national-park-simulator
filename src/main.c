@@ -15,6 +15,7 @@ shared_data_t* shared_data;
 guide_data_t* guides_data;
 visitor_data_t* visitors_data;
 int semid;
+sem_t visitor_sem;
 pid_t new_process;
 
 volatile sig_atomic_t kill_requested = 0;
@@ -51,22 +52,28 @@ void handle_continue(int sig)
     cont_handled = 0;
 }
 
-pthread_t zombie_thread = 0;
-void* zombie_cleaner(void *arg)
+void handle_child(int sig)
 {
-    (void)arg;
-    while(!kill_requested)
-    {
-        wait(NULL);
-    }
+    (void)sig;
 
-    while(errno != ECHILD)
-    {
-        wait(NULL);
-    }
-
-    return NULL;
+    b_t_sem_v(&visitor_sem);
 }
+// pthread_t zombie_thread = 0;
+// void* zombie_cleaner(void *arg)
+// {
+//     (void)arg;
+//     while(!kill_requested)
+//     {
+//         wait(NULL);
+//     }
+
+//     while(errno != ECHILD)
+//     {
+//         wait(NULL);
+//     }
+
+//     return NULL;
+// }
 
 int main()
 {
@@ -76,7 +83,7 @@ int main()
     new_process = b_execute("./bin/cashier", NULL);
     if (new_process == -1) end_simulation();
 
-    zombie_thread = b_execute_thread(zombie_cleaner); //starts thread here because there is at least one child now, this avoids CPU burn
+    //zombie_thread = b_execute_thread(zombie_cleaner); //starts thread here because there is at least one child now, this avoids CPU burn
 
     for(int i = 0; i < GUIDES_NUMBER; i++)
     {
@@ -88,7 +95,10 @@ int main()
 
     while(!kill_requested)
     {
-        b_sleep(b_randf(VISITOR_SPAWN_MIN_INTERVAL, VISITOR_SPAWN_MAX_INTERVAL));
+        b_sleep(b_randf(VISITOR_SPAWN_MIN_INTERVAL, VISITOR_SPAWN_MAX_INTERVAL), (volatile sig_atomic_t*[]){&kill_requested}, 1);
+        if (kill_requested) break;
+        //b_sem_p(semid, SEM_VISITOR, 1, (volatile sig_atomic_t*[]){&kill_requested}, 1);
+        b_t_sem_p(&visitor_sem, (volatile sig_atomic_t*[]){&kill_requested}, 1);
         if (kill_requested) break;
         new_process = b_execute("./bin/visitor", NULL);
         if (new_process == -1)
@@ -136,7 +146,7 @@ void check_configuration()
 
 void init()
 {
-    printf("MAKE ALL SLEEPS CONDITIONAL?(for instant exiting)\n");
+    printf("VISITOR BETWEEN RAISING SEM AND EXIT CAN OVERFLOW VISITOR BUFFER\n");
     printf("ADD SIGNAL1/2 FUNCTIONALITY\n");
     printf("ENSURE JORUNEY TAKES LESS THAN CLOSING TIME (and overall better conditions)\n");
     printf("RLIMITS check\n");
@@ -157,7 +167,14 @@ void init()
     sa.sa_flags = 0;
     sigaction(SIGCONT, &sa, NULL);
 
+    sa.sa_handler = handle_child;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_NOCLDSTOP | SA_NOCLDWAIT;
+    sigaction(SIGCHLD, &sa, NULL);
+
     setpgid(0, 0);
+
+    sem_init(&visitor_sem, 0, VISITORS_LIMIT);
 
     srand(time(NULL));
     shared_data = b_shm_attach(b_shm_get_id(SHM_SHARED_DATA, sizeof(shared_data_t)));
@@ -214,10 +231,10 @@ void end_simulation()
 {
     b_signal(-getpgrp(), SIGINT);
 
-    if (zombie_thread)
-    {
-        pthread_join(zombie_thread, NULL);
-    }
+    // if (zombie_thread)
+    // {
+    //     pthread_join(zombie_thread, NULL);
+    // }
 
     b_shm_dettach(shared_data);
     b_shm_remove(b_shm_get_id(SHM_SHARED_DATA, sizeof(shared_data_t)));
@@ -228,6 +245,7 @@ void end_simulation()
     b_msq_remove(b_msq_get_id(MSG_GUIDES));
 
     b_sem_remove(semid);
+    sem_destroy(&visitor_sem);
 
     exit(EXIT_SUCCESS);
 }

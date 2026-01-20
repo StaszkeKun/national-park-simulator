@@ -382,7 +382,7 @@ long b_msq_receive(int msqid, long type)
     {
         if (errno == EINTR)
         {
-            return -1;
+            return 0;
         }
         perror("[ERROR]: message queue receive error");
         exit(EXIT_FAILURE);
@@ -397,7 +397,7 @@ long b_msq_receive_nowait(int msqid, long type)
     {
         if (errno == ENOMSG)
         {
-            return -1;
+            return 0;
         }
         perror("[ERROR]: message queue receive error");
         exit(EXIT_FAILURE);

@@ -171,14 +171,14 @@ void operate()
                 if (vip_clockwise_track)
                 {
                     printf("[VIP %d]: moving to bridge\n", my_data->pid);
-                    b_sleep(b_randf(GUIDES_MOVETIME_MIN, GUIDES_MOVETIME_MAX), (volatile sig_atomic_t* []){&kill_requested, &leave_park, &leave_tower}, 3);
+                    b_sleep(b_randf(GUIDES_MOVETIME_MIN, GUIDES_MOVETIME_MAX), (volatile sig_atomic_t* []){&kill_requested}, 1);
                     my_data->status = VS_AT_BRIDGE;
                     break;
                 }
                 else
                 {
                     printf("[VIP %d]: moving to ferry\n", my_data->pid);
-                    b_sleep(b_randf(GUIDES_MOVETIME_MIN, GUIDES_MOVETIME_MAX), (volatile sig_atomic_t* []){&kill_requested, &leave_park, &leave_tower}, 3);
+                    b_sleep(b_randf(GUIDES_MOVETIME_MIN, GUIDES_MOVETIME_MAX), (volatile sig_atomic_t* []){&kill_requested}, 1);
                     my_data->status = VS_AWAITING_FERRY_START;
                     break;
                 }
@@ -211,7 +211,7 @@ void operate()
                 if (vip_clockwise_track)
                 {
                     printf("[VIP %d]: tries adding to bridge queue\n", my_data->pid);
-                    b_sem_p(semid, MUTEX_BRIDGE, 1, (volatile sig_atomic_t* []){&kill_requested, &leave_park, &leave_tower}, 3);
+                    b_sem_p(semid, MUTEX_BRIDGE, 1, (volatile sig_atomic_t* []){&kill_requested}, 1);
                     ringbuffer_push_back(&shared_data->bridge_queue_clockwise, my_data->pid);
                     printf("[VIP %d]: joined queue at bridge\n", my_data->pid);
                     b_sem_v(semid, MUTEX_BRIDGE, 1);
@@ -227,7 +227,7 @@ void operate()
                 else
                 {
                     printf("[VIP %d]: tries adding to bridge queue\n", my_data->pid);
-                    b_sem_p(semid, MUTEX_BRIDGE, 1, (volatile sig_atomic_t* []){&kill_requested, &leave_park, &leave_tower}, 3);
+                    b_sem_p(semid, MUTEX_BRIDGE, 1, (volatile sig_atomic_t* []){&kill_requested}, 1);
                     ringbuffer_push_back(&shared_data->bridge_queue_aclockwise, my_data->pid);
                     printf("[VIP %d]: joined queue at bridge\n", my_data->pid);
                     b_sem_v(semid, MUTEX_BRIDGE, 1);
@@ -249,7 +249,7 @@ void operate()
                     if(kill_requested) break;
                 }
 
-                b_sem_p(semid, MUTEX_BRIDGE, 1, (volatile sig_atomic_t* []){&kill_requested, &leave_park, &leave_tower}, 3);
+                b_sem_p(semid, MUTEX_BRIDGE, 1, (volatile sig_atomic_t* []){&kill_requested}, 1);
 
                 printf("[VIP %d]: started crossing bridge\n", my_data->pid);
                 if (vip_clockwise_track)
@@ -275,12 +275,12 @@ void operate()
 
                 b_sem_v(semid, MUTEX_BRIDGE, 1);
 
-                b_sleep(shared_data->bridge_crosstime, (volatile sig_atomic_t* []){&kill_requested, &leave_park, &leave_tower}, 3);
+                b_sleep(shared_data->bridge_crosstime, (volatile sig_atomic_t* []){&kill_requested}, 1);
                 printf("[VIP %d]: crossed bridge\n", my_data->pid);
 
                 b_sem_v(semid, SEM_BRIDGE, 1);
 
-                b_sem_p(semid, MUTEX_BRIDGE, 1, (volatile sig_atomic_t* []){&kill_requested, &leave_park, &leave_tower}, 3);
+                b_sem_p(semid, MUTEX_BRIDGE, 1, (volatile sig_atomic_t* []){&kill_requested}, 1);
 
                 shared_data->groups_on_bridge--;
                 if (vip_clockwise_track)
@@ -312,13 +312,13 @@ void operate()
                 if (vip_clockwise_track)
                 {
                     printf("[VIP %d]: moving to tower\n", my_data->pid);
-                    b_sleep(b_randf(GUIDES_MOVETIME_MIN, GUIDES_MOVETIME_MAX), (volatile sig_atomic_t* []){&kill_requested, &leave_park, &leave_tower}, 3);
+                    b_sleep(b_randf(GUIDES_MOVETIME_MIN, GUIDES_MOVETIME_MAX), (volatile sig_atomic_t* []){&kill_requested}, 1);
                     my_data->status = VS_GOING_UP_TOWER;
                 }
                 else
                 {
                     printf("[VIP %d]: moving to cashier\n", my_data->pid);
-                    b_sleep(b_randf(GUIDES_MOVETIME_MIN, GUIDES_MOVETIME_MAX), (volatile sig_atomic_t* []){&kill_requested, &leave_park, &leave_tower}, 3);
+                    b_sleep(b_randf(GUIDES_MOVETIME_MIN, GUIDES_MOVETIME_MAX), (volatile sig_atomic_t* []){&kill_requested}, 1);
                     b_msq_send(msgid_cashier, 2, my_data->pid);
                     b_wait_for_wakeup();
                 }
@@ -327,14 +327,12 @@ void operate()
             }
             else
             {
-                printf("[DEBUG V-%d] sem1 bridge\n", my_data->asigned_guide);
-                b_sem_p(semid, SEM_BRIDGE, 1 + my_data->kids_count, (volatile sig_atomic_t* []){&kill_requested, &leave_park, &leave_tower}, 3);
-                printf("[DEBUG V-%d] skleep bridge\n", my_data->asigned_guide);
-                b_sleep(shared_data->bridge_crosstime, (volatile sig_atomic_t* []){&kill_requested, &leave_park, &leave_tower}, 3);
-                printf("[DEBUG V-%d] endsleep\n", my_data->asigned_guide);
+                b_sem_p(semid, SEM_BRIDGE, 1 + my_data->kids_count, (volatile sig_atomic_t* []){&kill_requested}, 1);
+
+                b_sleep(shared_data->bridge_crosstime, (volatile sig_atomic_t* []){&kill_requested}, 1);
+
                 b_sem_v(semid, SEM_BRIDGE, 1 + my_data->kids_count);
-                printf("[DEBUG V-%d] try send bridge\n", my_data->asigned_guide);
-                printf("[DEBUG V-%d] send bridge\n", my_data->asigned_guide);
+
                 my_data->status = VS_FOLLOWING_GUIDE;
                 b_msq_send(msgid_guide, my_data->asigned_guide + 1, my_data->kids_count + 1);
                 break;
@@ -342,31 +340,49 @@ void operate()
         }
         case VS_AT_TOWER_QUEUE:
         {
-            printf("[DEBUG V-%d]: arrived at tower queue\n", my_data->asigned_guide);
             if (!my_data->tower_allowed)
             {
                 my_data->status = VS_FOLLOWING_GUIDE;
-                
+
                 b_msq_send(msgid_guide, my_data->asigned_guide + 1, 1 + my_data->kids_count);
 
                 break;
             }
-            printf("[DEBUG V-%d]: sem1\n", my_data->asigned_guide);
-            b_sem_p(semid, MUTEX_TOWER, 1, (volatile sig_atomic_t* []){&kill_requested, &leave_park, &leave_tower}, 3);
+
+            b_sem_p(semid, MUTEX_TOWER, 1, (volatile sig_atomic_t* []){&kill_requested}, 1);
 
             ringbuffer_push_back(&shared_data->tower_queue, my_data->pid);
 
             b_sem_v(semid, MUTEX_TOWER, 1);
-            
-            while(!check_if_first_secure(&shared_data->tower_queue, MUTEX_TOWER))
+
+            if (leave_tower || leave_park)
             {
-                printf("[DEBUG V-%d]: wasnt first\n", my_data->asigned_guide);
-                b_wait_for_wakeup();
-                if(kill_requested) break;
+                b_sem_p(semid, MUTEX_TOWER, 1, NULL, 0);
+                size_t pos_queue = ringbuffer_contains(&shared_data->tower_queue, my_data->pid);
+                ringbuffer_erase(&shared_data->tower_queue, pos_queue);
+                b_sem_v(semid, MUTEX_TOWER, 1);
+                my_data->status = VS_FOLLOWING_GUIDE;
+                b_msq_send(msgid_guide, my_data->asigned_guide + 1, 1 + my_data->kids_count);
+                break;
             }
 
-            printf("[DEBUG V-%d]: sem tower\n", my_data->asigned_guide);
-            b_sem_p(semid, MUTEX_TOWER, 1, (volatile sig_atomic_t* []){&kill_requested, &leave_park, &leave_tower}, 3);
+            while(!check_if_first_secure(&shared_data->tower_queue, MUTEX_TOWER))
+            {
+                b_wait_for_wakeup();
+                if(kill_requested) break;
+                if (leave_tower || leave_park)
+                {
+                    b_sem_p(semid, MUTEX_TOWER, 1, NULL, 0);
+                    size_t pos_queue = ringbuffer_contains(&shared_data->tower_queue, my_data->pid);
+                    ringbuffer_erase(&shared_data->tower_queue, pos_queue);
+                    b_sem_v(semid, MUTEX_TOWER, 1);
+                    my_data->status = VS_FOLLOWING_GUIDE;
+                    b_msq_send(msgid_guide, my_data->asigned_guide + 1, 1 + my_data->kids_count);
+                    break;
+                }
+            }
+
+            b_sem_p(semid, MUTEX_TOWER, 1, (volatile sig_atomic_t* []){&kill_requested}, 1);
 
             ringbuffer_pop_front(&shared_data->tower_queue, NULL);
 
@@ -385,25 +401,24 @@ void operate()
         }
         case VS_GOING_UP_TOWER:
         {
-            printf("[DEBUG V-%d]: sem towerup\n", my_data->asigned_guide);
-            b_sem_p(semid, SEM_TOWER, 1 + my_data->kids_count, (volatile sig_atomic_t* []){&kill_requested, &leave_park, &leave_tower}, 3);
-            printf("[DEBUG V-%d]: sem towerup sleep\n", my_data->asigned_guide);
-            b_sleep(shared_data->tower_uptime, (volatile sig_atomic_t* []){&kill_requested, &leave_park, &leave_tower}, 3);
-            printf("[DEBUG V-%d]: sem towerupnext\n", my_data->asigned_guide);
+            b_sem_p(semid, SEM_TOWER, 1 + my_data->kids_count, (volatile sig_atomic_t* []){&kill_requested}, 1);
+
+            b_sleep(shared_data->tower_uptime, (volatile sig_atomic_t* []){&kill_requested, &leave_tower}, 2);
+
             my_data->status = VS_AT_TOWER;
 
             break;
         }
         case VS_AT_TOWER:
         {
-            if (leave_tower == 0) b_sleep(shared_data->tower_seetime, (volatile sig_atomic_t* []){&kill_requested, &leave_park, &leave_tower}, 3);
+            b_sleep(shared_data->tower_seetime, (volatile sig_atomic_t* []){&kill_requested, &leave_park, &leave_tower}, 3);
             my_data->status = VS_GOING_DOWN_TOWER;
 
             break;
         }
         case VS_GOING_DOWN_TOWER:
         {
-            b_sleep(shared_data->tower_downtime, (volatile sig_atomic_t* []){&kill_requested, &leave_park, &leave_tower}, 3);
+            b_sleep(shared_data->tower_downtime, (volatile sig_atomic_t* []){&kill_requested, &leave_tower}, 2);
 
             b_sem_v(semid, SEM_TOWER, 1 + my_data->kids_count);
 
@@ -412,32 +427,28 @@ void operate()
                 if (vip_clockwise_track)
                 {
                     printf("[VIP %d]: moving to ferry\n", my_data->pid);
-                    b_sleep(b_randf(GUIDES_MOVETIME_MIN, GUIDES_MOVETIME_MAX), (volatile sig_atomic_t* []){&kill_requested, &leave_park, &leave_tower}, 3);
+                    b_sleep(b_randf(GUIDES_MOVETIME_MIN, GUIDES_MOVETIME_MAX), (volatile sig_atomic_t* []){&kill_requested}, 1);
                     my_data->status = VS_AWAITING_FERRY_START;
                 }
                 else
                 {
                     printf("[VIP %d]: moving to bridge\n", my_data->pid);
-                    b_sleep(b_randf(GUIDES_MOVETIME_MIN, GUIDES_MOVETIME_MAX), (volatile sig_atomic_t* []){&kill_requested, &leave_park, &leave_tower}, 3);
+                    b_sleep(b_randf(GUIDES_MOVETIME_MIN, GUIDES_MOVETIME_MAX), (volatile sig_atomic_t* []){&kill_requested}, 1);
                     my_data->status = VS_AT_BRIDGE;
                 }
             }
             else
             {
-                printf("[DEBUG V-%d]: tower send\n", my_data->asigned_guide);
                 my_data->status = VS_FOLLOWING_GUIDE;
                 b_msq_send(msgid_guide, my_data->asigned_guide + 1, 1 + my_data->kids_count);
-                printf("[DEBUG V-%d]: tower sent\n", my_data->asigned_guide);
             }
 
             break;
         }
         case VS_AT_FERRY_BOARDING:
         {
-            printf("[DEBUG V-%d]: try send ferry board\n", my_data->asigned_guide);
             my_data->status = VS_AWAITING_FERRY_START;
             b_msq_send(msgid_guide, my_data->asigned_guide + 1, 1 + my_data->kids_count);
-            printf("[DEBUG V-%d]: send ferry board\n", my_data->asigned_guide);
             break;
         }
         case VS_AWAITING_FERRY_START:
@@ -449,7 +460,7 @@ void operate()
                 if (vip_clockwise_track)
                 {
                     printf("[VIP %d]: tries adding to ferry vip queue\n", my_data->pid);
-                    b_sem_p(semid, MUTEX_FERRY, 1, (volatile sig_atomic_t* []){&kill_requested, &leave_park, &leave_tower}, 3);
+                    b_sem_p(semid, MUTEX_FERRY, 1, (volatile sig_atomic_t* []){&kill_requested}, 1);
                     ringbuffer_push_back(&shared_data->ferry_vipqueue_clockwise, my_data->pid);
                     printf("[VIP %d]: joined vip queue at ferry\n", my_data->pid);
                     b_sem_v(semid, MUTEX_FERRY, 1);
@@ -466,7 +477,7 @@ void operate()
                 else
                 {
                     printf("[VIP %d]: tries adding to ferry vip queue\n", my_data->pid);
-                    b_sem_p(semid, MUTEX_FERRY, 1, (volatile sig_atomic_t* []){&kill_requested, &leave_park, &leave_tower}, 3);
+                    b_sem_p(semid, MUTEX_FERRY, 1, (volatile sig_atomic_t* []){&kill_requested}, 1);
                     ringbuffer_push_back(&shared_data->ferry_vipqueue_aclockwise, my_data->pid);
                     printf("[VIP %d]: joined vip queue at ferry\n", my_data->pid);
                     b_sem_v(semid, MUTEX_FERRY, 1);
@@ -490,7 +501,7 @@ void operate()
                     if(kill_requested) break;
                 }
 
-                b_sem_p(semid, MUTEX_FERRY, 1, (volatile sig_atomic_t* []){&kill_requested, &leave_park, &leave_tower}, 3);
+                b_sem_p(semid, MUTEX_FERRY, 1, (volatile sig_atomic_t* []){&kill_requested}, 1);
 
                 printf("[VIP %d]: boarded ferry\n", my_data->pid);
                 if (vip_clockwise_track)
@@ -532,7 +543,7 @@ void operate()
 
                 if (ferry_leader)
                 {
-                    b_sem_p(semid, MUTEX_FERRY, 1, (volatile sig_atomic_t* []){&kill_requested, &leave_park, &leave_tower}, 3);
+                    b_sem_p(semid, MUTEX_FERRY, 1, (volatile sig_atomic_t* []){&kill_requested}, 1);
                     if (vip_clockwise_track && (shared_data->ferry_queue_clockwise.count != 0 || shared_data->ferry_vipqueue_clockwise.count != 0))
                     {
                         b_sem_v(semid, MUTEX_FERRY, 1);
@@ -549,12 +560,12 @@ void operate()
                     }
                     else b_sem_v(semid, MUTEX_FERRY, 1);
 
-                    b_sem_p(semid, MUTEX_FERRY, 1, (volatile sig_atomic_t* []){&kill_requested, &leave_park, &leave_tower}, 3);
+                    b_sem_p(semid, MUTEX_FERRY, 1, (volatile sig_atomic_t* []){&kill_requested}, 1);
 
                     shared_data->ferry_side = 2;
 
                     printf("[VIP %d - ferry captain]: ferry starts\n", my_data->pid);
-                    b_sleep(FERRY_VOYAGE_TIME, (volatile sig_atomic_t* []){&kill_requested, &leave_park, &leave_tower}, 3);
+                    b_sleep(FERRY_VOYAGE_TIME, (volatile sig_atomic_t* []){&kill_requested}, 1);
                     printf("[VIP %d - ferry captain]: ferry stops\n", my_data->pid);
 
                     for(int i = 1; i < shared_data->ferry_seats_taken; i++)
@@ -569,7 +580,7 @@ void operate()
                 }
                 else
                 {
-                    b_sem_p(semid, MUTEX_FERRY, 1, (volatile sig_atomic_t* []){&kill_requested, &leave_park, &leave_tower}, 3);
+                    b_sem_p(semid, MUTEX_FERRY, 1, (volatile sig_atomic_t* []){&kill_requested}, 1);
                     
                     if (vip_clockwise_track)
                     {
@@ -625,7 +636,7 @@ void operate()
                 if (vip_clockwise_track)
                 {
                     printf("[VIP %d]: moving to cashier\n", my_data->pid);
-                    b_sleep(b_randf(GUIDES_MOVETIME_MIN, GUIDES_MOVETIME_MAX), (volatile sig_atomic_t* []){&kill_requested, &leave_park, &leave_tower}, 3);
+                    b_sleep(b_randf(GUIDES_MOVETIME_MIN, GUIDES_MOVETIME_MAX), (volatile sig_atomic_t* []){&kill_requested}, 1);
                     b_msq_send(msgid_cashier, 2, my_data->pid);
                     b_wait_for_wakeup();
                     if (kill_requested) break;
@@ -633,7 +644,7 @@ void operate()
                 else
                 {
                     printf("[VIP %d]: moving to tower\n", my_data->pid);
-                    b_sleep(b_randf(GUIDES_MOVETIME_MIN, GUIDES_MOVETIME_MAX), (volatile sig_atomic_t* []){&kill_requested, &leave_park, &leave_tower}, 3);
+                    b_sleep(b_randf(GUIDES_MOVETIME_MIN, GUIDES_MOVETIME_MAX), (volatile sig_atomic_t* []){&kill_requested}, 1);
                     my_data->status = VS_GOING_UP_TOWER;
                 }
             }
@@ -662,7 +673,7 @@ void operate()
 int register_visitor()
 {
     int id = 0;
-    b_sem_p(semid, MUTEX_ALLOC_VISITOR, 1, (volatile sig_atomic_t* []){&kill_requested, &leave_park, &leave_tower}, 3);
+    b_sem_p(semid, MUTEX_ALLOC_VISITOR, 1, (volatile sig_atomic_t* []){&kill_requested}, 1);
 
     while(true)
     {
@@ -722,7 +733,7 @@ void create_visitor()
 
 bool try_pass_bridge_vip()
 {
-    b_sem_p(semid, MUTEX_BRIDGE, 1, (volatile sig_atomic_t* []){&kill_requested, &leave_park, &leave_tower}, 3);
+    b_sem_p(semid, MUTEX_BRIDGE, 1, (volatile sig_atomic_t* []){&kill_requested}, 1);
 
     if (shared_data->bridge_direction != vip_clockwise_track)
     {
@@ -739,7 +750,7 @@ bool try_pass_bridge_vip()
 
     shared_data->groups_on_bridge++;
 
-    b_sem_p(semid, SEM_BRIDGE, 1, (volatile sig_atomic_t* []){&kill_requested, &leave_park, &leave_tower}, 3);
+    b_sem_p(semid, SEM_BRIDGE, 1, (volatile sig_atomic_t* []){&kill_requested}, 1);
 
     b_sem_v(semid, MUTEX_BRIDGE, 1);
     return true;
@@ -747,13 +758,13 @@ bool try_pass_bridge_vip()
 
 bool try_board_ferry_vip()
 {
-    b_sem_p(semid, MUTEX_FERRY, 1, (volatile sig_atomic_t* []){&kill_requested, &leave_park, &leave_tower}, 3);
+    b_sem_p(semid, MUTEX_FERRY, 1, (volatile sig_atomic_t* []){&kill_requested}, 1);
 
     if (shared_data->ferry_side != vip_clockwise_track && shared_data->ferry_seats_taken == 0)
     {
         printf("[VIP %d]: no one on the other side calling the ferry\n", my_data->pid);
         shared_data->ferry_side = 2;
-        b_sleep(FERRY_VOYAGE_TIME, (volatile sig_atomic_t* []){&kill_requested, &leave_park, &leave_tower}, 3);
+        b_sleep(FERRY_VOYAGE_TIME, (volatile sig_atomic_t* []){&kill_requested}, 1);
         shared_data->ferry_side = vip_clockwise_track;
     }
 
@@ -771,7 +782,7 @@ bool try_board_ferry_vip()
         return false;
     }
 
-    b_sem_p(semid, SEM_FERRY, 1, (volatile sig_atomic_t* []){&kill_requested, &leave_park, &leave_tower}, 3);
+    b_sem_p(semid, SEM_FERRY, 1, (volatile sig_atomic_t* []){&kill_requested}, 1);
 
     shared_data->ferry_seats[shared_data->ferry_seats_taken] = my_data->pid;
 
@@ -786,7 +797,7 @@ bool try_board_ferry_vip()
 
 bool check_if_first_secure(void* buf, int mutex)
 {
-    b_sem_p(semid, mutex, 1, (volatile sig_atomic_t* []){&kill_requested, &leave_park, &leave_tower}, 3);
+    b_sem_p(semid, mutex, 1, (volatile sig_atomic_t* []){&kill_requested}, 1);
 
     pid_t first_element;
     ringbuffer_at(buf, 0, &first_element);

@@ -145,7 +145,7 @@ void operate()
             {
                 long visitor_pid = b_msq_receive_nowait(msgid_cashier, 1);
 
-                if(visitor_pid != -1)
+                if(visitor_pid != 0)
                 {
                     visitor_data_t* visitor_data = b_get_visitor_by_pid(visitors_data, visitor_pid);
                     if (visitors_in_group + visitor_data->kids_count + 1 <= GROUP_SIZE)
@@ -171,7 +171,7 @@ void operate()
                 if (visitors_in_group > 0 && b_tick() - update_time > GUIDES_GATHER_WAIT) break;
                 if (kill_requested) break;
 
-                if (visitor_pid == -1)
+                if (visitor_pid == 0)
                 {
                     double now = b_get_time_of_day(shared_data->start_time);
                     if (now > OPEN_TIME)
@@ -319,7 +319,6 @@ void operate()
             if (kill_requested) break;
             while(visitors_checkins < visitors_in_group)
             {
-                printf("%dand started waiting\n", my_id);
                 long message = b_msq_receive(msgid_guide, my_id + 1);
                 if (kill_requested) break;
                 visitors_checkins += message;
@@ -374,17 +373,16 @@ void operate()
                 b_signal(my_data->groups[i]->pid, SIG_WAKE_UP);
             }
 
-            visitors_checkins = 0;
-
+            
             for(int i = 0; i < my_data->group_count; i++)
             {
                 b_signal(my_data->groups[i]->pid, SIG_WAKE_UP);
             }
-
+            
             if (kill_requested) break;
+            visitors_checkins = 0;
             while(visitors_checkins < visitors_in_group)
             {
-                printf("%dand started waiting\n", my_id);
                 long msg = b_msq_receive(msgid_guide, my_id+1);
                 if (kill_requested) break;
                 visitors_checkins += msg;
@@ -499,7 +497,7 @@ void operate()
             if (kill_requested) break;
             while(visitors_checkins < visitors_in_group)
             {
-                printf("%dand started waiting\n", my_id);
+
                 long checkin = b_msq_receive(msgid_guide, my_id + 1);
                 if (kill_requested) break;
                 visitors_checkins += checkin;
@@ -585,7 +583,6 @@ void operate()
             if (kill_requested) break;
             while(visitors_checkins < visitors_in_group)
             {
-                printf("%dand started waiting\n", my_id);
                 long msg = b_msq_receive(msgid_guide, my_id+1);
                 if (kill_requested) break;
                 visitors_checkins += msg;

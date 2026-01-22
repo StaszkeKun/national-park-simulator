@@ -74,7 +74,7 @@ int main()
             day++;
             setup_today = true;
         }
-        
+
         if (b_get_time_of_day(shared_data->start_time) > OPEN_TIME && setup_today)
         {
             log_today();
@@ -98,7 +98,7 @@ int main()
         }
 
         visitor_data_t* current_visitor_data = b_get_visitor_by_pid(visitors_data, current_pid);
-        
+
         if (b_get_time_of_day(shared_data->start_time) > OPEN_TIME)
         {
             //printf("[CASHIER]: Visitor %d with %d kids dismissed - closing hours\n", current_pid, current_visitor_data->kids_count);
@@ -129,11 +129,6 @@ void init()
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = 0;
     sigaction(SIGINT, &sa, NULL);
-
-    sa.sa_handler = handle_wake_up;
-    sigemptyset(&sa.sa_mask);
-    sa.sa_flags = 0;
-    sigaction(SIG_WAKE_UP, &sa, NULL);
 
     sigset_t set;
     sigemptyset(&set);
@@ -268,15 +263,15 @@ void log_today()
     if(file == NULL)
     {
         perror("[ERROR]: logging error");
-        //printf("[LOG ERROR BACKUP]: day: %d\n", day);
-        //printf("[LOG ERROR BACKUP]: gold earned: %d\n", gold_today);
-        //printf("[LOG ERROR BACKUP]: visitors today: %d\n", visitors_today);
-        //printf("[LOG ERROR BACKUP]: visitors today:\n");
+        printf("[LOG ERROR BACKUP]: day: %d\n", day);
+        printf("[LOG ERROR BACKUP]: gold earned: %d\n", gold_today);
+        printf("[LOG ERROR BACKUP]: visitors today: %d\n", visitors_today);
+        printf("[LOG ERROR BACKUP]: visitors today:\n");
         for(unsigned int i = 0; i < visitors_today; i++)
         {
-            //printf("[LOG ERROR BACKUP]: %ld", visitors_pids[i]);
+            printf("[LOG ERROR BACKUP]: %ld", visitors_pids[i]);
         }
-        //printf("[LOG ERROR BACKUP]: end");
+        printf("[LOG ERROR BACKUP]: end");
         return;
     }
 

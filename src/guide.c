@@ -71,7 +71,7 @@ int main(int argc, char *argv[])
         perror("[ERROR]: ivalid guide ID");
         exit(EXIT_FAILURE);
     }
-    
+
     init();
 
     while(!kill_requested)
@@ -90,11 +90,6 @@ void init()
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = 0;
     sigaction(SIGINT, &sa, NULL);
-
-    sa.sa_handler = handle_wake_up;
-    sigemptyset(&sa.sa_mask);
-    sa.sa_flags = 0;
-    sigaction(SIG_WAKE_UP, &sa, NULL);
 
     sa.sa_handler = handle_leave_park;
     sigemptyset(&sa.sa_mask);
@@ -167,9 +162,14 @@ void operate()
                 }
 
                 if (visitors_in_group >= GROUP_SIZE) break;
-                if (visitors_in_group > 0 && b_get_time_of_day(shared_data->start_time) > OPEN_TIME) break;
                 if (visitors_in_group > 0 && b_tick() - update_time > GUIDES_GATHER_WAIT) break;
                 if (kill_requested) break;
+
+                if (visitors_in_group > 0 && b_get_time_of_day(shared_data->start_time) > OPEN_TIME)
+                {
+                    my_data->status = GS_MOVING_TO_CASH;
+                    break;
+                }
 
                 if (visitor_pid == 0)
                 {
@@ -373,12 +373,12 @@ void operate()
                 b_signal(my_data->groups[i]->pid, SIG_WAKE_UP);
             }
 
-            
+
             for(int i = 0; i < my_data->group_count; i++)
             {
                 b_signal(my_data->groups[i]->pid, SIG_WAKE_UP);
             }
-            
+
             if (kill_requested) break;
             visitors_checkins = 0;
             while(visitors_checkins < visitors_in_group)
@@ -543,7 +543,7 @@ void operate()
 
                 shared_data->ferry_seats_taken = 0;
                 shared_data->ferry_side = 1 - clockwise_track;
-                
+
                 b_sem_v(semid, MUTEX_FERRY, 1);
             }
             else

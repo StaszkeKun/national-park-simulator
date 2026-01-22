@@ -25,33 +25,6 @@ void handle_kill(int sig)
     kill_requested = 1;
 }
 
-volatile sig_atomic_t stop_handled = 0;
-void handle_stop(int sig)
-{
-    (void)sig;
-    if (stop_handled) return;
-    
-    stop_handled = 1;
-    
-    b_signal(-getpgrp(), SIGSTOP);
-    
-    stop_handled = 0;
-    pause();
-}
-
-volatile sig_atomic_t cont_handled = 0;
-void handle_continue(int sig)
-{
-    (void)sig;
-    if (cont_handled) return;
-    
-    cont_handled = 1;
-    
-    b_signal(-getpgrp(), SIGCONT);
-    
-    cont_handled = 0;
-}
-
 void handle_child(int sig)
 {
     (void)sig;
@@ -137,20 +110,15 @@ void init()
     sa.sa_flags = 0;
     sigaction(SIGINT, &sa, NULL);
 
-    sa.sa_handler = handle_stop;
-    sigemptyset(&sa.sa_mask);
-    sa.sa_flags = 0;
-    sigaction(SIGSTOP, &sa, NULL);
-
-    sa.sa_handler = handle_continue;
-    sigemptyset(&sa.sa_mask);
-    sa.sa_flags = 0;
-    sigaction(SIGCONT, &sa, NULL);
-
     sa.sa_handler = handle_child;
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = SA_NOCLDSTOP | SA_NOCLDWAIT;
     sigaction(SIGCHLD, &sa, NULL);
+
+    sa.sa_handler = SIG_IGN;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    sigaction(SIG_WAKE_UP, &sa, NULL);
 
     setpgid(0, 0);
 

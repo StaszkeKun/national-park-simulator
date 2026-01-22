@@ -85,11 +85,6 @@ void init()
     sa.sa_flags = 0;
     sigaction(SIGINT, &sa, NULL);
 
-    sa.sa_handler = handle_wake_up;
-    sigemptyset(&sa.sa_mask);
-    sa.sa_flags = 0;
-    sigaction(SIG_WAKE_UP, &sa, NULL);
-
     sa.sa_handler = handle_leave_park;
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = 0;
@@ -151,6 +146,7 @@ void operate()
     {
         case VS_NONE:
         {
+            my_data->status = VS_AWAITING_TICKET;
             if (my_data->isVIP)
             {
                 b_fifo_write(fifo_vip, &my_data->pid, sizeof(pid_t));
@@ -159,7 +155,6 @@ void operate()
             {
                 b_fifo_write(fifo_regular, &my_data->pid, sizeof(pid_t));
             }
-            my_data->status = VS_AWAITING_TICKET;
 
             break;
         }
@@ -575,13 +570,13 @@ void operate()
 
                     shared_data->ferry_seats_taken = 0;
                     shared_data->ferry_side = 1 - vip_clockwise_track;
-                    
+
                     b_sem_v(semid, MUTEX_FERRY, 1);
                 }
                 else
                 {
                     b_sem_p(semid, MUTEX_FERRY, 1, (volatile sig_atomic_t* []){&kill_requested}, 1);
-                    
+
                     if (vip_clockwise_track)
                     {
                         if (shared_data->ferry_queue_clockwise.count == 0 && shared_data->ferry_vipqueue_clockwise.count == 0)

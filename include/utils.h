@@ -58,7 +58,7 @@ void b_signal(pid_t target, int signal)
 {
     if(kill(target, signal) < 0)
     {
-        if (errno = ESRCH) return;
+        if (errno == ESRCH) return;
         char msg[64];
         snprintf(msg, sizeof(msg), "[ERROR]: signal (%d) sending error to (%d)", signal, target);
         perror(msg);
@@ -96,14 +96,16 @@ void b_sleep(double time, volatile sig_atomic_t** cond, int cond_n)
 {
     if (time <= 0.0) return;
 
-    struct timespec tv, rem;
-    tv.tv_sec = (time_t)time;
-    tv.tv_nsec = (long)((time - tv.tv_sec) * 1e9);
+    struct timespec now, end;
+    clock_gettime(CLOCK_MONOTONIC, &now);
 
-    if (tv.tv_nsec >= 1000000000L)
+    end.tv_sec  = now.tv_sec + (time_t)time;
+    end.tv_nsec = now.tv_nsec + (long)((time - (time_t)time) * 1e9);
+
+    if (end.tv_nsec >= 1000000000L)
     {
-        tv.tv_sec++;
-        tv.tv_nsec -= 1000000000L;
+        end.tv_sec++;
+        end.tv_nsec -= 1000000000L;
     }
 
     for(int i = 0; i < cond_n; i++)
@@ -111,18 +113,22 @@ void b_sleep(double time, volatile sig_atomic_t** cond, int cond_n)
         if (*cond[i]) return;
     }
 
-    while (nanosleep(&tv, &rem) == -1)
+    while(true)
     {
-        if (errno != EINTR)
+        int rv = clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &end, NULL);
+
+        if (rv == 0) return;
+
+        if (rv != EINTR)
         {
-            perror("[ERROR]: sleep error");
+            fprintf(stderr, "[ERROR]: sleep error: %s\n", strerror(rv));
             exit(EXIT_FAILURE);
         }
+
         for (int i = 0; i < cond_n; i++)
         {
             if (*cond[i]) return;
         }
-        tv = rem;
     }
 }
 
@@ -370,6 +376,12 @@ void b_msq_send(int msqid, long type, long message)
     msg.message = message;
     if (msgsnd(msqid, &msg, sizeof(long), 0) == -1)
     {
+        if (errno == EINTR)
+        {
+            b_msq_send(msqid, type, message);
+            return;
+        }
+
         perror("[ERROR]: message queue send error");
         exit(EXIT_FAILURE);
     }

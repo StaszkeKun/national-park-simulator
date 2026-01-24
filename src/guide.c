@@ -65,14 +65,14 @@ void handle_leave_tower(int sig)
 
 int main(int argc, char *argv[])
 {
-    if(argc < 2)
+    if (argc < 2)
     {
         perror("[ERROR]: guide ID not provided");
         exit(EXIT_FAILURE);
     }
 
     my_id = atoi(argv[1]);
-    if(my_id < 0 || my_id >= GUIDES_NUMBER)
+    if (my_id < 0 || my_id >= GUIDES_NUMBER)
     {
         perror("[ERROR]: ivalid guide ID");
         exit(EXIT_FAILURE);
@@ -146,7 +146,7 @@ void operate()
             {
                 long visitor_pid = b_msq_receive_nowait(msgid_cashier, 1);
 
-                if(visitor_pid != 0)
+                if (visitor_pid != 0)
                 {
                     visitor_data_t* visitor_data = b_get_visitor_by_pid(visitors_data, visitor_pid);
                     if (visitors_in_group + visitor_data->kids_count + 1 <= GROUP_SIZE)
@@ -308,7 +308,7 @@ void operate()
                 printf("[GUIDE %d]: couldn't pass\n", my_id);
                 b_wait_for_wakeup();
                 printf("[GUIDE %d]: wake up trypass\n", my_id);
-                if(kill_requested) break;
+                if (kill_requested) break;
                 if (leave_park)
                 {
                     b_sem_p(semid, MUTEX_BRIDGE, 1, NULL, 0);
@@ -475,13 +475,13 @@ void operate()
                 printf("[GUIDE %d]: joined queue at ferry\n", my_id);
                 b_sem_v(semid, MUTEX_FERRY, 1);
 
-                if(kill_requested) break;
+                if (kill_requested) break;
                 while(!check_if_first_secure(&shared_data->ferry_queue_clockwise, MUTEX_FERRY) && shared_data->ferry_vipqueue_clockwise.count == 0)
                 {
                     printf("[GUIDE %d]: is not first in line\n", my_id);
                     b_wait_for_wakeup();
                     printf("[GUIDE %d]: wake up check if first\n", my_id);
-                    if(kill_requested) break;
+                    if (kill_requested) break;
                     if (leave_park)
                     {
                         b_sem_p(semid, MUTEX_FERRY, 1, NULL, 0);
@@ -501,13 +501,13 @@ void operate()
                 printf("[GUIDE %d]: joined queue at ferry\n", my_id);
                 b_sem_v(semid, MUTEX_FERRY, 1);
 
-                if(kill_requested) break;
+                if (kill_requested) break;
                 while(!check_if_first_secure(&shared_data->ferry_queue_aclockwise, MUTEX_FERRY) && shared_data->ferry_vipqueue_aclockwise.count == 0)
                 {
                     printf("[GUIDE %d]: is not first in line\n", my_id);
                     b_wait_for_wakeup();
                     printf("[GUIDE %d]: wake up check if first\n", my_id);
-                    if(kill_requested) break;
+                    if (kill_requested) break;
                     if (leave_park)
                     {
                         b_sem_p(semid, MUTEX_FERRY, 1, NULL, 0);
@@ -520,13 +520,13 @@ void operate()
                 }
             }
 
-            if(kill_requested) break;
+            if (kill_requested) break;
             while(!try_board_ferry())
             {
                 printf("[GUIDE %d]: couldnt board\n", my_id);
                 b_wait_for_wakeup();
                 printf("[GUIDE %d]: wake up tryboard\n", my_id);
-                if(kill_requested) break;
+                if (kill_requested) break;
                 if (leave_park)
                 {
                     b_sem_p(semid, MUTEX_FERRY, 1, NULL, 0);

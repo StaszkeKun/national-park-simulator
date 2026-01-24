@@ -63,7 +63,7 @@ void ringbuffer_at(ringbuffer_t* buf, size_t pos, pid_t* out_element)
 
 size_t ringbuffer_contains(ringbuffer_t* buf, pid_t value)
 {
-    for (size_t i = 0; i < buf->count; i++)
+    for(size_t i = 0; i < buf->count; i++)
     {
         pid_t potential_element;
         ringbuffer_at(buf, i, &potential_element);

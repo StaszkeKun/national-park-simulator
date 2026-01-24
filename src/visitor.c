@@ -216,7 +216,7 @@ void operate()
                         printf("[VIP %d]: is not first in line\n", my_data->pid);
                         b_wait_for_wakeup();
                         printf("[VTP %d]: wake up check if first\n", my_data->pid);
-                        if(kill_requested) break;
+                        if (kill_requested) break;
                     }
                 }
                 else
@@ -232,7 +232,7 @@ void operate()
                         printf("[VIP %d]: is not first in line\n", my_data->pid);
                         b_wait_for_wakeup();
                         printf("[VTP %d]: wake up check if first\n", my_data->pid);
-                        if(kill_requested) break;
+                        if (kill_requested) break;
                     }
                 }
 
@@ -241,7 +241,7 @@ void operate()
                     printf("[VIP %d]: couldn't pass\n", my_data->pid);
                     b_wait_for_wakeup();
                     printf("[VIP %d]: wake up trypass\n", my_data->pid);
-                    if(kill_requested) break;
+                    if (kill_requested) break;
                 }
 
                 b_sem_p(semid, MUTEX_BRIDGE, 1, (volatile sig_atomic_t* []){&kill_requested}, 1);
@@ -364,7 +364,7 @@ void operate()
             while(!check_if_first_secure(&shared_data->tower_queue, MUTEX_TOWER))
             {
                 b_wait_for_wakeup();
-                if(kill_requested) break;
+                if (kill_requested) break;
                 if (leave_tower || leave_park)
                 {
                     b_sem_p(semid, MUTEX_TOWER, 1, NULL, 0);
@@ -460,13 +460,13 @@ void operate()
                     printf("[VIP %d]: joined vip queue at ferry\n", my_data->pid);
                     b_sem_v(semid, MUTEX_FERRY, 1);
 
-                    if(kill_requested) break;
+                    if (kill_requested) break;
                     while(!check_if_first_secure(&shared_data->ferry_vipqueue_clockwise, MUTEX_FERRY))
                     {
                         printf("[VIP %d]: is not first in line\n", my_data->pid);
                         b_wait_for_wakeup();
                         printf("[VIP %d]: wake up check if first\n", my_data->pid);
-                        if(kill_requested) break;
+                        if (kill_requested) break;
                     }
                 }
                 else
@@ -477,23 +477,23 @@ void operate()
                     printf("[VIP %d]: joined vip queue at ferry\n", my_data->pid);
                     b_sem_v(semid, MUTEX_FERRY, 1);
 
-                    if(kill_requested) break;
+                    if (kill_requested) break;
                     while(!check_if_first_secure(&shared_data->ferry_vipqueue_aclockwise, MUTEX_FERRY))
                     {
                         printf("[VIP %d]: is not first in line\n", my_data->pid);
                         b_wait_for_wakeup();
                         printf("[VIP %d]: wake up check if first\n", my_data->pid);
-                        if(kill_requested) break;
+                        if (kill_requested) break;
                     }
                 }
 
-                if(kill_requested) break;
+                if (kill_requested) break;
                 while(!try_board_ferry_vip())
                 {
                     printf("[VIP %d]: couldnt board\n", my_data->pid);
                     b_wait_for_wakeup();
                     printf("[VIP %d]: wake up tryboard\n", my_data->pid);
-                    if(kill_requested) break;
+                    if (kill_requested) break;
                 }
 
                 b_sem_p(semid, MUTEX_FERRY, 1, (volatile sig_atomic_t* []){&kill_requested}, 1);

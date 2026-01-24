@@ -21,7 +21,7 @@ typedef struct {
 vector_t* vector_new(size_t element_size)
 {
     vector_t* vec = (vector_t*)malloc(sizeof(vector_t));
-    if(vec == NULL)
+    if (vec == NULL)
     {
         errno = ENOMEM;
         perror("[ERROR]: vector_new");
@@ -32,7 +32,7 @@ vector_t* vector_new(size_t element_size)
     vec->capacity = VECTOR_MIN_CAPACITY;
     vec->length = 0;
     vec->ptr = malloc(element_size * VECTOR_MIN_CAPACITY);
-    if(vec->ptr == NULL)
+    if (vec->ptr == NULL)
     {
         errno = ENOMEM;
         perror("[ERROR]: vector_new");
@@ -51,7 +51,7 @@ void vector_free(vector_t* vec)
 void _vector_reallocate(vector_t* vec, size_t new_capacity)
 {
     void* temp = realloc(vec->ptr, vec->element_size * new_capacity);
-    if(temp == NULL)
+    if (temp == NULL)
     {
         errno = ENOMEM;
         perror("[ERROR]: _vector_reallocate");
@@ -66,11 +66,11 @@ void _vector_set_length(vector_t* vec, size_t new_length)
 {
     vec->length = new_length;
 
-    if(vec->length > vec->capacity * VECTOR_ALLOCATE_THRESHOLD)
+    if (vec->length > vec->capacity * VECTOR_ALLOCATE_THRESHOLD)
     {
         _vector_reallocate(vec, vec->capacity * VECTOR_EXTEND);
     }
-    else if(vec->length < vec->capacity * VECTOR_DEALLOCATE_THRESHOLD && (int)(vec->capacity * VECTOR_SHRINK) >= VECTOR_MIN_CAPACITY)
+    else if (vec->length < vec->capacity * VECTOR_DEALLOCATE_THRESHOLD && (int)(vec->capacity * VECTOR_SHRINK) >= VECTOR_MIN_CAPACITY)
     {
         _vector_reallocate(vec, vec->capacity * VECTOR_SHRINK);
     }
@@ -132,7 +132,7 @@ void vector_pop_front(vector_t* vec, void* out_element)
 
 void vector_remove(vector_t* vec, void* element)
 {
-    for (int i = 0; i < vec->length; i++)
+    for(int i = 0; i < vec->length; i++)
     {
         void* curr = vec->ptr + i * vec->element_size;
         if (memcmp(curr, element, vec->element_size) == 0)

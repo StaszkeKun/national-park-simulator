@@ -83,7 +83,7 @@ int main()
             {
                 b_signal(guides_data[i].pid, SIG_LEAVE_PARK);
             }
-            while (true)
+            while(true)
             {
                 long pid_in_queue = b_msq_receive_nowait(msgid, 1);
                 if (pid_in_queue == 0) break;
@@ -184,9 +184,9 @@ void end_simulation()
     b_shm_dettach(visitors_data);
     b_shm_dettach(guides_data);
 
-    if(fifo_regular >= 0) b_fifo_close(fifo_regular);
+    if (fifo_regular >= 0) b_fifo_close(fifo_regular);
     b_fifo_delete(TICKET_REGULAR_PATH);
-    if(fifo_vip >= 0) b_fifo_close(fifo_vip);
+    if (fifo_vip >= 0) b_fifo_close(fifo_vip);
     b_fifo_delete(TICKET_VIP_PATH);
 
     exit(EXIT_SUCCESS);
@@ -259,7 +259,7 @@ void log_today()
         bool all_ready = true;
         for(int i = 0; i < GUIDES_NUMBER; i++)
         {
-            if(guides_data[i].group_count > 0 && guides_data[i].status == GS_GATHERING_GROUP)
+            if (guides_data[i].group_count > 0 && guides_data[i].status == GS_GATHERING_GROUP)
             {
                 all_ready = false;
             }
@@ -274,9 +274,10 @@ void log_today()
     char date[32];
     time_t s = (time_t)shared_data->start_time;
     strftime(date, sizeof(date), "%Y-%m-%d_%H:%M:%S", localtime(&s));
-    sprintf(title, "./logs/%s_day_%d.log", date, day);
+    snprintf(title, sizeof(title), "./logs/%s_day_%d.log", date, day);
+    if (mkdir("./logs", 0755) == -1 && errno != EEXIST) perror("[ERROR] can't create logs directory");
     FILE* file = fopen(title, "w");
-    if(file == NULL)
+    if (file == NULL)
     {
         perror("[ERROR]: logging error");
         printf("[LOG ERROR BACKUP]: day: %d\n", day);
@@ -285,9 +286,9 @@ void log_today()
         printf("[LOG ERROR BACKUP]: visitors entered today:\n");
         for(unsigned int i = 0; i < visitors_today; i++)
         {
-            printf("[LOG ERROR BACKUP]: %ld", visitors_pids[i]);
+            printf("[LOG ERROR BACKUP]: %ld\n", visitors_pids[i]);
         }
-        printf("[LOG ERROR BACKUP]: end");
+        printf("[LOG ERROR BACKUP]: end\n");
         return;
     }
 

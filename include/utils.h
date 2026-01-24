@@ -56,7 +56,7 @@ pthread_t b_execute_thread(void* (*func)(void *))
 
 void b_signal(pid_t target, int signal)
 {
-    if(kill(target, signal) < 0)
+    if (kill(target, signal) < 0)
     {
         if (errno == ESRCH) return;
         char msg[64];
@@ -125,7 +125,7 @@ void b_sleep(double time, volatile sig_atomic_t** cond, int cond_n)
             exit(EXIT_FAILURE);
         }
 
-        for (int i = 0; i < cond_n; i++)
+        for(int i = 0; i < cond_n; i++)
         {
             if (*cond[i]) return;
         }
@@ -167,16 +167,16 @@ int b_randi(int min, int max)
 
     do {
         r = rand();
-    } while (r >= limit);
+    } while(r >= limit);
 
     return min + (r % range);
 }
 
 visitor_data_t* b_get_visitor_by_pid(visitor_data_t* visitor_data_array, pid_t searched_pid)
 {
-    if(searched_pid == 0) return NULL;
+    if (searched_pid == 0) return NULL;
 
-    for (int i = 0; i < VISITORS_LIMIT; i++)
+    for(int i = 0; i < VISITORS_LIMIT; i++)
     {
         if (visitor_data_array[i].pid == searched_pid)
         {

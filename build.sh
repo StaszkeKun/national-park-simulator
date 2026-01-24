@@ -6,7 +6,7 @@ else
     echo "Building with no test"
 fi
 
-mkdir ./bin
+mkdir -p ./bin
 
 gcc -Iinclude -g -fsanitize=address,undefined -Wall -Wextra -Werror -pedantic $FLAG src/main.c -lm -lpthread -o bin/main
 gcc -Iinclude -g -fsanitize=address,undefined -Wall -Wextra -Werror -pedantic $FLAG src/cashier.c -lm -lpthread -o bin/cashier

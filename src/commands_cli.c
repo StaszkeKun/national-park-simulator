@@ -27,8 +27,8 @@ int main()
     sigaction(SIGINT, &sa, NULL);
 
     printf("USAGE:\n");
-    printf("send signal 1 (force guide\'s group to leave tower): type `tower {guide id}`\n");
-    printf("send signal 2 (force guide\'s group to immediately start leaving park): type `leave {guide id}`\n");
+    printf("send signal 1 (force guide\'s group to immediately leave tower): type `tower {guide id}`\n");
+    printf("send signal 2 (force guide\'s group to start leaving park as soon as possible): type `leave {guide id}`\n");
     printf("exit CLI: type `exit`\n");
     printf("available guide ids: 0 - %d\n", GUIDES_NUMBER-1);
 

@@ -43,9 +43,15 @@ void handle_wake_up(int sig)
     (void)sig;
 }
 
+volatile sig_atomic_t leave_park = 0;
 void handle_leave_park(int sig)
 {
     (void)sig;
+    leave_park = 1;
+    for(int i = 0; i < my_data->group_count; i++)
+    {
+        b_signal(my_data->groups[i]->pid, SIG_LEAVE_PARK);
+    }
 }
 
 void handle_leave_tower(int sig)
@@ -157,19 +163,15 @@ void operate()
                     else
                     {
                         b_msq_send(msgid_cashier, 1, visitor_pid);
-                        printf("[GUIDE %d]: %ld did't fit group - sending to queue\n", my_id, visitor_pid);
+                        printf("[GUIDE %d]: %ld didn't fit group - sending to queue\n", my_id, visitor_pid);
+                        b_sleep(GUIDES_GATHER_CHECK_INTERVAL, (volatile sig_atomic_t* []){&kill_requested}, 1);
                     }
                 }
 
                 if (visitors_in_group >= GROUP_SIZE) break;
-                if (visitors_in_group > 0 && b_tick() - update_time > GUIDES_GATHER_WAIT) break;
+                if (visitors_in_group > 0 && (b_tick() - update_time > GUIDES_GATHER_WAIT || b_get_time_of_day(shared_data->start_time) > OPEN_TIME)) break;
                 if (kill_requested) break;
-
-                if (visitors_in_group > 0 && b_get_time_of_day(shared_data->start_time) > OPEN_TIME)
-                {
-                    my_data->status = GS_MOVING_TO_CASH;
-                    break;
-                }
+                if (leave_park) break;
 
                 if (visitor_pid == 0)
                 {
@@ -190,6 +192,13 @@ void operate()
             my_data->status = clockwise_track ? GS_MOVING_TO_BRIDGE : GS_MOVING_TO_FERRY;
 
             printf("[GUIDE %d]: finished gathering group: %d\n", my_id, visitors_in_group);
+
+            if (visitors_in_group > 0 && (b_get_time_of_day(shared_data->start_time) > OPEN_TIME || leave_park))
+            {
+                my_data->status = GS_MOVING_TO_CASH;
+                break;
+            }
+
             break;
         }
         case GS_MOVING_TO_BRIDGE:
@@ -237,6 +246,12 @@ void operate()
                 b_signal(my_data->groups[i]->pid, SIG_WAKE_UP);
             }
 
+            if (leave_park)
+            {
+                my_data->status = GS_MOVING_TO_CASH;
+                break;
+            }
+
             if (clockwise_track)
             {
                 printf("[GUIDE %d]: tries adding to bridge queue\n", my_id);
@@ -250,7 +265,16 @@ void operate()
                     printf("[GUIDE %d]: is not first in line\n", my_id);
                     b_wait_for_wakeup();
                     printf("[GUIDE %d]: wake up check if first\n", my_id);
-                    if(kill_requested) break;
+                    if (kill_requested) break;
+                    if (leave_park)
+                    {
+                        b_sem_p(semid, MUTEX_BRIDGE, 1, NULL, 0);
+                        size_t pos_queue = ringbuffer_contains(&shared_data->bridge_queue_clockwise, my_data->pid);
+                        ringbuffer_erase(&shared_data->bridge_queue_clockwise, pos_queue);
+                        b_sem_v(semid, MUTEX_BRIDGE, 1);
+                        my_data->status = GS_MOVING_TO_CASH;
+                        break;
+                    }
                 }
             }
             else
@@ -266,7 +290,16 @@ void operate()
                     printf("[GUIDE %d]: is not first in line\n", my_id);
                     b_wait_for_wakeup();
                     printf("[GUIDE %d]: wake up check if first\n", my_id);
-                    if(kill_requested) break;
+                    if (kill_requested) break;
+                    if (leave_park)
+                    {
+                        b_sem_p(semid, MUTEX_BRIDGE, 1, NULL, 0);
+                        size_t pos_queue = ringbuffer_contains(&shared_data->bridge_queue_aclockwise, my_data->pid);
+                        ringbuffer_erase(&shared_data->bridge_queue_aclockwise, pos_queue);
+                        b_sem_v(semid, MUTEX_BRIDGE, 1);
+                        my_data->status = GS_MOVING_TO_CASH;
+                        break;
+                    }
                 }
             }
 
@@ -276,6 +309,35 @@ void operate()
                 b_wait_for_wakeup();
                 printf("[GUIDE %d]: wake up trypass\n", my_id);
                 if(kill_requested) break;
+                if (leave_park)
+                {
+                    b_sem_p(semid, MUTEX_BRIDGE, 1, NULL, 0);
+                    if (clockwise_track)
+                    {
+                        size_t pos_queue = ringbuffer_contains(&shared_data->bridge_queue_clockwise, my_data->pid);
+                        ringbuffer_erase(&shared_data->bridge_queue_clockwise, pos_queue);
+                        if (shared_data->bridge_queue_clockwise.count > 0)
+                        {
+                            pid_t next;
+                            ringbuffer_at(&shared_data->bridge_queue_clockwise, 0, &next);
+                            b_signal(next, SIG_WAKE_UP);
+                        }
+                    }
+                    else
+                    {
+                        size_t pos_queue = ringbuffer_contains(&shared_data->bridge_queue_aclockwise, my_data->pid);
+                        ringbuffer_erase(&shared_data->bridge_queue_aclockwise, pos_queue);
+                        if (shared_data->bridge_queue_aclockwise.count > 0)
+                        {
+                            pid_t next;
+                            ringbuffer_at(&shared_data->bridge_queue_aclockwise, 0, &next);
+                            b_signal(next, SIG_WAKE_UP);
+                        }
+                    }
+                    b_sem_v(semid, MUTEX_BRIDGE, 1);
+                    my_data->status = GS_MOVING_TO_CASH;
+                    break;
+                }
             }
 
             b_sem_p(semid, MUTEX_BRIDGE, 1, (volatile sig_atomic_t* []){&kill_requested}, 1);
@@ -310,11 +372,6 @@ void operate()
             b_sem_v(semid, SEM_BRIDGE, 1);
 
             visitors_checkins = 0;
-
-            for(int i = 0; i < my_data->group_count; i++)
-            {
-                b_signal(my_data->groups[i]->pid, SIG_WAKE_UP);
-            }
 
             if (kill_requested) break;
             while(visitors_checkins < visitors_in_group)
@@ -362,6 +419,8 @@ void operate()
                 my_data->status = GS_MOVING_TO_CASH;
             }
 
+            if (leave_park) my_data->status = GS_MOVING_TO_CASH;
+
             break;
         }
         case GS_AT_TOWER:
@@ -373,20 +432,15 @@ void operate()
                 b_signal(my_data->groups[i]->pid, SIG_WAKE_UP);
             }
 
-
-            for(int i = 0; i < my_data->group_count; i++)
-            {
-                b_signal(my_data->groups[i]->pid, SIG_WAKE_UP);
-            }
+            visitors_checkins = 0;
 
             if (kill_requested) break;
-            visitors_checkins = 0;
             while(visitors_checkins < visitors_in_group)
             {
                 long msg = b_msq_receive(msgid_guide, my_id+1);
                 if (kill_requested) break;
                 visitors_checkins += msg;
-                printf("[GUIDE %d]: waiting fo group to sightsee tower %d/%d\n", my_id, visitors_checkins, visitors_in_group);
+                printf("[GUIDE %d]: waiting for group to sightsee tower %d/%d\n", my_id, visitors_checkins, visitors_in_group);
             }
             printf("[GUIDE %d]: left tower\n", my_id);
 
@@ -399,11 +453,19 @@ void operate()
                 my_data->status = GS_MOVING_TO_BRIDGE;
             }
 
+            if (leave_park) my_data->status = GS_MOVING_TO_CASH;
+
             break;
         }
         case GS_AT_FERRY:
         {
             printf("[GUIDE %d]: arrived at ferry\n", my_id);
+
+            if (leave_park)
+            {
+                my_data->status = GS_MOVING_TO_CASH;
+                break;
+            }
 
             if (clockwise_track)
             {
@@ -420,6 +482,15 @@ void operate()
                     b_wait_for_wakeup();
                     printf("[GUIDE %d]: wake up check if first\n", my_id);
                     if(kill_requested) break;
+                    if (leave_park)
+                    {
+                        b_sem_p(semid, MUTEX_FERRY, 1, NULL, 0);
+                        size_t pos_queue = ringbuffer_contains(&shared_data->ferry_queue_clockwise, my_data->pid);
+                        ringbuffer_erase(&shared_data->ferry_queue_clockwise, pos_queue);
+                        b_sem_v(semid, MUTEX_FERRY, 1);
+                        my_data->status = GS_MOVING_TO_CASH;
+                        break;
+                    }
                 }
             }
             else
@@ -437,6 +508,15 @@ void operate()
                     b_wait_for_wakeup();
                     printf("[GUIDE %d]: wake up check if first\n", my_id);
                     if(kill_requested) break;
+                    if (leave_park)
+                    {
+                        b_sem_p(semid, MUTEX_FERRY, 1, NULL, 0);
+                        size_t pos_queue = ringbuffer_contains(&shared_data->ferry_queue_aclockwise, my_data->pid);
+                        ringbuffer_erase(&shared_data->ferry_queue_aclockwise, pos_queue);
+                        b_sem_v(semid, MUTEX_FERRY, 1);
+                        my_data->status = GS_MOVING_TO_CASH;
+                        break;
+                    }
                 }
             }
 
@@ -447,6 +527,35 @@ void operate()
                 b_wait_for_wakeup();
                 printf("[GUIDE %d]: wake up tryboard\n", my_id);
                 if(kill_requested) break;
+                if (leave_park)
+                {
+                    b_sem_p(semid, MUTEX_FERRY, 1, NULL, 0);
+                    if (clockwise_track)
+                    {
+                        size_t pos_queue = ringbuffer_contains(&shared_data->ferry_queue_clockwise, my_data->pid);
+                        ringbuffer_erase(&shared_data->ferry_queue_clockwise, pos_queue);
+                        if (shared_data->ferry_queue_clockwise.count > 0)
+                        {
+                            pid_t next;
+                            ringbuffer_at(&shared_data->ferry_queue_clockwise, 0, &next);
+                            b_signal(next, SIG_WAKE_UP);
+                        }
+                    }
+                    else
+                    {
+                        size_t pos_queue = ringbuffer_contains(&shared_data->ferry_queue_aclockwise, my_data->pid);
+                        ringbuffer_erase(&shared_data->ferry_queue_aclockwise, pos_queue);
+                        if (shared_data->ferry_queue_aclockwise.count > 0)
+                        {
+                            pid_t next;
+                            ringbuffer_at(&shared_data->ferry_queue_aclockwise, 0, &next);
+                            b_signal(next, SIG_WAKE_UP);
+                        }
+                    }
+                    b_sem_v(semid, MUTEX_FERRY, 1);
+                    my_data->status = GS_MOVING_TO_CASH;
+                    break;
+                }
             }
 
             b_sem_p(semid, MUTEX_FERRY, 1, (volatile sig_atomic_t* []){&kill_requested}, 1);
@@ -489,15 +598,9 @@ void operate()
 
             visitors_checkins = 0;
 
-            for(int i = 0; i < my_data->group_count; i++)
-            {
-                b_signal(my_data->groups[i]->pid, SIG_WAKE_UP);
-            }
-
             if (kill_requested) break;
             while(visitors_checkins < visitors_in_group)
             {
-
                 long checkin = b_msq_receive(msgid_guide, my_id + 1);
                 if (kill_requested) break;
                 visitors_checkins += checkin;
@@ -575,18 +678,13 @@ void operate()
 
             visitors_checkins = 0;
 
-            for(int i = 0; i < my_data->group_count; i++)
-            {
-                b_signal(my_data->groups[i]->pid, SIG_WAKE_UP);
-            }
-
             if (kill_requested) break;
             while(visitors_checkins < visitors_in_group)
             {
                 long msg = b_msq_receive(msgid_guide, my_id+1);
                 if (kill_requested) break;
                 visitors_checkins += msg;
-                printf("[GUIDE %d]: waiting fo group to disboard %d/%d\n", my_id, visitors_checkins, visitors_in_group);
+                printf("[GUIDE %d]: waiting for group to disboard %d/%d\n", my_id, visitors_checkins, visitors_in_group);
             }
 
             b_sem_v(semid, SEM_FERRY, 1 + visitors_in_group);
@@ -620,6 +718,8 @@ void operate()
             if (clockwise_track) my_data->status = GS_MOVING_TO_CASH;
             else my_data->status = GS_MOVING_TO_TOWER;
 
+            if (leave_park) my_data->status = GS_MOVING_TO_CASH;
+
             printf("[GUIDE %d]: left ferry\n", my_id);
             break;
         }
@@ -632,6 +732,7 @@ void operate()
             }
             printf("[GUIDE %d]: finished leaving report\n", my_id);
             //clean up for next tour
+            leave_park = 0;
             my_data->group_count = 0;
             my_data->status = GS_GATHERING_GROUP;
             b_signal(shared_data->cashier_pid, SIG_WAKE_UP);

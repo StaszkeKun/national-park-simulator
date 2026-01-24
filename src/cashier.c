@@ -73,10 +73,26 @@ int main()
             gold_today = 0;
             day++;
             setup_today = true;
+            printf("//////////DAY %d//////////\n", day);
         }
 
         if (b_get_time_of_day(shared_data->start_time) > OPEN_TIME && setup_today)
         {
+            printf("//////////NIGHT FELL//////////\n");
+            for(int i = 0; i < GUIDES_NUMBER; i++)
+            {
+                b_signal(guides_data[i].pid, SIG_LEAVE_PARK);
+            }
+            while (true)
+            {
+                long pid_in_queue = b_msq_receive_nowait(msgid, 1);
+                if (pid_in_queue == 0) break;
+                visitor_data_t* queue_visitor_data = b_get_visitor_by_pid(visitors_data, pid_in_queue);
+                printf("[CASHIER]: Visitor %ld with %d kids dismissed - closing hours\n", pid_in_queue, queue_visitor_data->kids_count);
+                queue_visitor_data->status = VS_LEAVING;
+                b_signal(pid_in_queue, SIGINT);
+            }
+
             log_today();
             setup_today = false;
         }
@@ -107,7 +123,7 @@ int main()
             continue;
         }
 
-        if (1 + current_visitor_data->kids_count + visitors_today > VISITORS_LIMIT)
+        if (1 + current_visitor_data->kids_count + visitors_today >= VISITORS_LIMIT)
         {
             //printf("[CASHIER]: Visitor %d with %d kids dismissed - daily visitor limit\n", current_pid, current_visitor_data->kids_count);
             current_visitor_data->status = VS_LEAVING;
@@ -265,8 +281,8 @@ void log_today()
         perror("[ERROR]: logging error");
         printf("[LOG ERROR BACKUP]: day: %d\n", day);
         printf("[LOG ERROR BACKUP]: gold earned: %d\n", gold_today);
-        printf("[LOG ERROR BACKUP]: visitors today: %d\n", visitors_today);
-        printf("[LOG ERROR BACKUP]: visitors today:\n");
+        printf("[LOG ERROR BACKUP]: visitors entered today: %d\n", visitors_today);
+        printf("[LOG ERROR BACKUP]: visitors entered today:\n");
         for(unsigned int i = 0; i < visitors_today; i++)
         {
             printf("[LOG ERROR BACKUP]: %ld", visitors_pids[i]);
@@ -276,8 +292,8 @@ void log_today()
     }
 
     fprintf(file, "gold earned: %d\n", gold_today);
-    fprintf(file, "visitors today: %d\n", visitors_today);
-    fprintf(file, "visitors today:\n");
+    fprintf(file, "visitors entries today: %d\n", visitors_today);
+    fprintf(file, "visitors entries today:\n");
     for(unsigned int i = 0; i < visitors_today; i++)
     {
         fprintf(file, "%ld\n", visitors_pids[i]);

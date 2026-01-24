@@ -315,7 +315,7 @@ void b_sem_v(int semid, int semnum, int val)
     op.sem_num = semnum;
     op.sem_op = val;
     op.sem_flg = 0;
-    
+
     if (semop(semid, &op, 1) < 0)
     {
         perror("[ERROR]: Semaphore V operation error");

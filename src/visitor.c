@@ -398,7 +398,7 @@ void operate()
         {
             b_sem_p(semid, SEM_TOWER, 1 + my_data->kids_count, (volatile sig_atomic_t* []){&kill_requested}, 1);
 
-            b_sleep(shared_data->tower_uptime, (volatile sig_atomic_t* []){&kill_requested, &leave_tower}, 2);
+            b_sleep(shared_data->tower_uptime, (volatile sig_atomic_t* []){&kill_requested, &leave_park, &leave_tower}, 3);
 
             my_data->status = VS_AT_TOWER;
 
@@ -413,7 +413,7 @@ void operate()
         }
         case VS_GOING_DOWN_TOWER:
         {
-            b_sleep(shared_data->tower_downtime, (volatile sig_atomic_t* []){&kill_requested, &leave_tower}, 2);
+            b_sleep(shared_data->tower_downtime, (volatile sig_atomic_t* []){&kill_requested, &leave_park, &leave_tower}, 3);
 
             b_sem_v(semid, SEM_TOWER, 1 + my_data->kids_count);
 

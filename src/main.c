@@ -100,10 +100,10 @@ void check_configuration()
 
 void init()
 {
-    printf("ADD SIGNAL 2 FUNCTIONALITY\n");
     printf("ENSURE JORUNEY TAKES LESS THAN CLOSING TIME (and overall better conditions)\n");
     printf("RLIMITS check\n");
     printf("ADD COMMENTS\n");
+    printf("ADD TESTS\n");
     struct sigaction sa;
     sa.sa_handler = handle_kill;
     sigemptyset(&sa.sa_mask);

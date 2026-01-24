@@ -95,6 +95,11 @@ void init()
     sa.sa_flags = 0;
     sigaction(SIG_LEAVE_TOWER, &sa, NULL);
 
+    sa.sa_handler = SIG_IGN;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    sigaction(SIGXCPU, &sa, NULL);
+
     sigset_t set;
     sigemptyset(&set);
     sigaddset(&set, SIG_WAKE_UP);
@@ -703,7 +708,7 @@ void create_visitor()
     my_data->tower_allowed = true;
     my_data->isVIP = false;
 
-    if (b_randf(0, 1) <= VIP_CHANCE)
+    if (b_randf(0, 1) < VIP_CHANCE)
     {
         my_data->isVIP = true;
         if (b_randf(0, 1) < 0.5) vip_clockwise_track = true;

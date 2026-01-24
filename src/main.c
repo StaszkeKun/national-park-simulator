@@ -6,6 +6,7 @@
 #include "constants.h"
 #include "utils.h"
 #include <sys/wait.h>
+#include <sys/resource.h>
 
 void check_configuration();
 void init();
@@ -66,42 +67,8 @@ int main()
     return 0;
 }
 
-void check_configuration()
-{
-    //TODO: more conditions (checking with limits, checking if makes sense (max_kids + 1 > max_group))
-    if (BRIDGE_LIMIT >= GROUP_SIZE)
-    {
-        errno = EDOM;
-        perror("[ERROR]: BRIGE_LIMIT must be lower than GROUP_SIZE");
-        exit(EXIT_FAILURE);
-    }
-
-    if (TOWER_LIMIT >= 2 * GROUP_SIZE)
-    {
-        errno = EDOM;
-        perror("[ERROR]: TOWER_LIMIT must be lower than 2*GROUP_SIZE");
-        exit(EXIT_FAILURE);
-    }
-
-    if (FERRY_LIMIT >= 1.5 * GROUP_SIZE)
-    {
-        errno = EDOM;
-        perror("[ERROR]: RIVER_LIMIT must be lower than 1.5*GROUP_SIZE");
-        exit(EXIT_FAILURE);
-    }
-
-    if (OPEN_TIME < 0 || CLOSE_TIME < 0)
-    {
-        errno = EDOM;
-        perror("[ERROR]: OPEN_TIME and CLOSE_TIME can't be negative");
-        exit(EXIT_FAILURE);
-    }
-}
-
 void init()
 {
-    printf("ENSURE JORUNEY TAKES LESS THAN CLOSING TIME (and overall better conditions)\n");
-    printf("RLIMITS check\n");
     printf("ADD COMMENTS\n");
     printf("ADD TESTS\n");
     struct sigaction sa;
@@ -109,6 +76,7 @@ void init()
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = 0;
     sigaction(SIGINT, &sa, NULL);
+    sigaction(SIGXCPU, &sa, NULL);
 
     sa.sa_handler = handle_child;
     sigemptyset(&sa.sa_mask);
@@ -191,4 +159,89 @@ void end_simulation()
     sem_destroy(&visitor_sem);
 
     exit(EXIT_SUCCESS);
+}
+
+void check_configuration()
+{
+    if (BRIDGE_LIMIT >= GROUP_SIZE)
+    {
+        errno = EDOM;
+        perror("[ERROR]: BRIGE_LIMIT must be lower than GROUP_SIZE");
+        exit(EXIT_FAILURE);
+    }
+
+    if (TOWER_LIMIT >= 2 * GROUP_SIZE)
+    {
+        errno = EDOM;
+        perror("[ERROR]: TOWER_LIMIT must be lower than 2*GROUP_SIZE");
+        exit(EXIT_FAILURE);
+    }
+
+    if (FERRY_LIMIT >= 1.5 * GROUP_SIZE)
+    {
+        errno = EDOM;
+        perror("[ERROR]: FERRY_LIMIT must be lower than 1.5*GROUP_SIZE");
+        exit(EXIT_FAILURE);
+    }
+
+    if (OPEN_TIME <= 0 || CLOSE_TIME <= 0)
+    {
+        errno = EDOM;
+        perror("[ERROR]: OPEN_TIME and CLOSE_TIME can't be zero or less");
+        exit(EXIT_FAILURE);
+    }
+
+    if (KIDS_LIMIT + 1 > GROUP_SIZE)
+    {
+        errno = EDOM;
+        perror("[ERROR]: KIDS_LIMIT has to be lower than GROUP_SIZE");
+        exit(EXIT_FAILURE);
+    }
+
+    struct rlimit rl;
+    if (getrlimit(RLIMIT_CPU, &rl) != 0)
+    {
+        perror("[ERROR]: getrlimit error");
+    }
+
+    if (rl.rlim_cur != RLIM_INFINITY)
+    {
+        fprintf(stderr, "[WARNING]: simulation will close after %ld seconds due to limits\n", rl.rlim_cur);
+    }
+
+    if (getrlimit(RLIMIT_NPROC, &rl) != 0)
+    {
+        perror("[ERROR]: getrlimit error");
+    }
+
+    if (rl.rlim_cur <= 1 + 2 + GUIDES_NUMBER)
+    {
+        errno = EDOM;
+        perror("[ERROR]: limits on number of processes is to little");
+        exit(EXIT_FAILURE);
+    }
+
+    if (rl.rlim_cur < 1 + 2 + GUIDES_NUMBER + VISITORS_LIMIT)
+    {
+        fprintf(stderr, "[WARNING]: due to limits there could be errors when there is too many visitors\n");
+    }
+
+    if (VISITORS_LIMIT <= 0)
+    {
+        errno = EDOM;
+        perror("[ERROR]: VISITORS_LIMIT can't be zero or less");
+        exit(EXIT_FAILURE);
+    }
+
+    if (GUIDES_NUMBER <= 0 || GROUP_SIZE <= 0)
+    {
+        errno = EDOM;
+        perror("[ERROR]: GUIDES_NUMBER and GROUP_SIZE can't be zero or less");
+        exit(EXIT_FAILURE);
+    }
+
+    if (TICKET_PRICE < 0)
+    {
+        fprintf(stderr, "[WARNING]: ticket price is less than zero\n");
+    }
 }

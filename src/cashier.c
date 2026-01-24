@@ -146,6 +146,11 @@ void init()
     sa.sa_flags = 0;
     sigaction(SIGINT, &sa, NULL);
 
+    sa.sa_handler = SIG_IGN;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    sigaction(SIGXCPU, &sa, NULL);
+
     sigset_t set;
     sigemptyset(&set);
     sigaddset(&set, SIG_WAKE_UP);

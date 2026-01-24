@@ -107,6 +107,11 @@ void init()
     sa.sa_flags = 0;
     sigaction(SIG_LEAVE_TOWER, &sa, NULL);
 
+    sa.sa_handler = SIG_IGN;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    sigaction(SIGXCPU, &sa, NULL);
+
     sigset_t set;
     sigemptyset(&set);
     sigaddset(&set, SIG_WAKE_UP);
@@ -164,14 +169,14 @@ void operate()
                     {
                         b_msq_send(msgid_cashier, 1, visitor_pid);
                         printf("[GUIDE %d]: %ld didn't fit group - sending to queue\n", my_id, visitor_pid);
-                        b_sleep(GUIDES_GATHER_CHECK_INTERVAL, (volatile sig_atomic_t* []){&kill_requested}, 1);
+                        b_sleep(GUIDES_GATHER_CHECK_INTERVAL, (volatile sig_atomic_t* []){&kill_requested, &leave_park}, 2);
                     }
                 }
 
                 if (visitors_in_group >= GROUP_SIZE) break;
                 if (visitors_in_group > 0 && (b_tick() - update_time > GUIDES_GATHER_WAIT || b_get_time_of_day(shared_data->start_time) > OPEN_TIME)) break;
                 if (kill_requested) break;
-                if (leave_park) break;
+                if (visitors_in_group > 0 && leave_park) break;
 
                 if (visitor_pid == 0)
                 {
@@ -339,6 +344,8 @@ void operate()
                     break;
                 }
             }
+
+            if (my_data->status == GS_MOVING_TO_CASH && leave_park) break;
 
             b_sem_p(semid, MUTEX_BRIDGE, 1, (volatile sig_atomic_t* []){&kill_requested}, 1);
 
@@ -558,6 +565,8 @@ void operate()
                 }
             }
 
+            if (my_data->status == GS_MOVING_TO_CASH && leave_park) break;
+
             b_sem_p(semid, MUTEX_FERRY, 1, (volatile sig_atomic_t* []){&kill_requested}, 1);
 
             printf("[GUIDE %d]: boarded ferry\n", my_id);
@@ -597,6 +606,12 @@ void operate()
             b_sem_v(semid, MUTEX_FERRY, 1);
 
             visitors_checkins = 0;
+
+            for(int i = 0; i < my_data->group_count; i++)
+            {
+                my_data->groups[i]->status = VS_AT_FERRY_BOARDING;
+                b_signal(my_data->groups[i]->pid, SIG_WAKE_UP);
+            }
 
             if (kill_requested) break;
             while(visitors_checkins < visitors_in_group)
@@ -840,12 +855,6 @@ bool try_board_ferry()
     else ferry_leader = false;
 
     shared_data->ferry_seats_taken++;
-
-    for(int i = 0; i < my_data->group_count; i++)
-    {
-        my_data->groups[i]->status = VS_AT_FERRY_BOARDING;
-        b_signal(my_data->groups[i]->pid, SIG_WAKE_UP);
-    }
 
     b_sem_v(semid, MUTEX_FERRY, 1);
     return true;

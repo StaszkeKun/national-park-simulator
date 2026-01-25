@@ -260,6 +260,12 @@ void sell_ticket(visitor_data_t* visitor_data)
         printf("[CASHIER]: let kid %ld in under visitor %d protection\n", visitor_data->kids[i].tid, visitor_data->pid);
     }
     visitor_data->status = VS_AWAITING_GUIDE;
+
+    while (b_msq_available_slots(msgid) <= 1)
+    {
+        b_sleep(0.01, NULL, 0); //this is extremely unlikely to happen
+    }
+
     b_msq_send(msgid, 1, visitor_data->pid);
     b_signal(visitor_data->pid, SIG_WAKE_UP);
 }

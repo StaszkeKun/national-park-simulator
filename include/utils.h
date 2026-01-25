@@ -428,6 +428,20 @@ void b_msq_remove(int msqid)
     }
 }
 
+unsigned long b_msq_available_slots(int msqid)
+{
+    struct msqid_ds buf;
+    if (msgctl(msqid, IPC_STAT, &buf) == -1)
+    {
+        perror("[ERROR]: msgctl IPC_STAT error");
+        exit(EXIT_FAILURE);
+    }
+
+    if (buf.msg_qnum * sizeof(long) >= buf.msg_qbytes) return 0;
+
+    return (buf.msg_qbytes - buf.msg_qnum * sizeof(long)) / sizeof(long);
+}
+
 //fifo
 void b_fifo_delete(char* path)
 {

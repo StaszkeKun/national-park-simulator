@@ -6,7 +6,7 @@
 void init();
 void end_simulation();
 void operate();
-int register_visitor();
+void register_visitor();
 void create_visitor();
 bool try_pass_bridge_vip();
 bool try_board_ferry_vip();
@@ -44,16 +44,18 @@ void* kid_thread(void* arg)
 }
 
 int semid;
-int myid;
 int msgid_cashier;
 int msgid_guide;
 
+//shared memory pointers
 shared_data_t* shared_data = NULL;
-visitor_data_t* visitors_data = NULL;
-visitor_data_t* my_data = NULL;
+visitor_data_t* visitors_data = NULL; //whole visitor_data array
+visitor_data_t* my_data = NULL; //pointer to specific visitor_data point with this visitor's data
 
 int fifo_regular = -1;
 int fifo_vip = -1;
+
+//vip control variables
 bool vip_clockwise_track;
 bool ferry_leader;
 
@@ -99,6 +101,7 @@ void init()
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = 0;
     sigaction(SIGXCPU, &sa, NULL);
+    sigaction(SIGTERM, &sa, NULL);
 
     sigset_t set;
     sigemptyset(&set);
@@ -114,7 +117,6 @@ void init()
 
     if (kill_requested) return;
     fifo_regular = b_fifo_open(TICKET_REGULAR_PATH, O_WRONLY);
-    if (kill_requested) return;
     fifo_vip = b_fifo_open(TICKET_VIP_PATH, O_WRONLY);
 
     if (kill_requested) return;
@@ -123,7 +125,7 @@ void init()
 
     if (kill_requested) return;
     semid = b_sem_get_id();
-    myid = register_visitor();
+    register_visitor();
 }
 
 void end_simulation()
@@ -148,8 +150,10 @@ void end_simulation()
 
 void operate()
 {
+    //VIP needs redesign but works for now
     switch (my_data->status)
     {
+        //initial state
         case VS_NONE:
         {
             my_data->status = VS_AWAITING_TICKET;
@@ -164,6 +168,7 @@ void operate()
 
             break;
         }
+        //vip choose direction, wait otherwise
         case VS_AWAITING_GUIDE:
         {
             if (my_data->isVIP)
@@ -199,6 +204,7 @@ void operate()
             }
             break;
         }
+        //wait for guide commands
         case VS_AWAITING_TICKET:
         case VS_AWAITING_START:
         case VS_AT_BRIDGE_QUEUE:
@@ -213,6 +219,8 @@ void operate()
             b_wait_for_wakeup();
             break;
         }
+        //wait for semaphore - cross - release semahpore - check in with guide
+        //vip manage entry on bridge on their own
         case VS_AT_BRIDGE:
         {
             if (my_data->isVIP)
@@ -427,6 +435,7 @@ void operate()
                 break;
             }
         }
+        //manage entry on the tower without guide's help
         case VS_AT_TOWER_QUEUE:
         {
             if (!my_data->tower_allowed)
@@ -549,6 +558,7 @@ void operate()
             b_msq_send(msgid_guide, my_data->asigned_guide + 1, 1 + my_data->kids_count);
             break;
         }
+        //vip manage to board/steer ferry on their own
         case VS_AWAITING_FERRY_START:
         {
             if (my_data->isVIP)
@@ -845,7 +855,7 @@ void operate()
     }
 }
 
-int register_visitor()
+void register_visitor()
 {
     int id = 0;
     b_sem_p(semid, MUTEX_ALLOC_VISITOR, 1, (volatile sig_atomic_t* []){&kill_requested}, 1);
@@ -871,7 +881,6 @@ int register_visitor()
     }
 
     b_sem_v(semid, MUTEX_ALLOC_VISITOR, 1);
-    return id;
 }
 
 void create_visitor()

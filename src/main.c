@@ -13,12 +13,13 @@ void check_configuration();
 void init();
 void end_simulation();
 
+//shared memory pointers
 shared_data_t* shared_data;
 guide_data_t* guides_data;
 visitor_data_t* visitors_data;
+
 int semid;
-sem_t visitor_sem;
-pid_t new_process;
+sem_t visitor_sem; //limits spawn of visitors to not overflow ringbuffer
 
 volatile sig_atomic_t kill_requested = 0;
 void handle_kill(int sig)
@@ -39,7 +40,7 @@ int main()
     check_configuration();
     init();
 
-    new_process = b_execute("./bin/cashier", NULL);
+    pid_t new_process = b_execute("./bin/cashier", NULL);
     if (new_process == -1) end_simulation();
 
     for(int i = 0; i < GUIDES_NUMBER; i++)
@@ -53,7 +54,6 @@ int main()
     while(!kill_requested)
     {
         b_sleep(b_randf(VISITOR_SPAWN_MIN_INTERVAL, VISITOR_SPAWN_MAX_INTERVAL), (volatile sig_atomic_t*[]){&kill_requested}, 1);
-        if (kill_requested) break;
         b_t_sem_p(&visitor_sem, (volatile sig_atomic_t*[]){&kill_requested}, 1);
         if (kill_requested) break;
         new_process = b_execute("./bin/visitor", NULL);
@@ -70,7 +70,6 @@ int main()
 
 void init()
 {
-    printf("ADD COMMENTS\n");
     struct sigaction sa;
     sa.sa_handler = handle_kill;
     sigemptyset(&sa.sa_mask);
@@ -94,6 +93,9 @@ void init()
     sem_init(&visitor_sem, 0, VISITORS_LIMIT);
 
     srand(time(NULL));
+
+    //shared memory initialization
+    //careful with queues capacity as it is for now hardcoded to accept max of VISITOR_LIMIT as capacity, could cause SEGFAULT otherwise
     shared_data = b_shm_attach(b_shm_get_id(SHM_SHARED_DATA, sizeof(shared_data_t)));
     shared_data->start_time = b_tick();
     shared_data->bridge_direction = true;
@@ -224,7 +226,7 @@ void check_configuration()
             perror("[ERROR]: limits on number of processes is to little");
             exit(EXIT_FAILURE);
         }
-    
+
         if (rl.rlim_cur != RLIM_INFINITY && rl.rlim_cur < 1 + 2 + GUIDES_NUMBER + VISITORS_LIMIT)
         {
             fprintf(stderr, "[WARNING]: due to limits there could be errors when there is too many visitors\n");
@@ -244,7 +246,7 @@ void check_configuration()
             perror("[ERROR]: VISITORS_LIMIT is too much for available RAM");
             exit(EXIT_FAILURE);
         }
-    
+
         if ((2 + GUIDES_NUMBER + VISITORS_LIMIT)*3000UL > 2*1024*1024)
         {
             fprintf(stderr, "[WARNING]: this amount of visitors could take at most around %ldMB\n", (2 + GUIDES_NUMBER + VISITORS_LIMIT)*3000UL/1024);

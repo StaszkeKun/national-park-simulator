@@ -19,7 +19,6 @@ void handle_kill(int sig)
 
 int main()
 {
-
     struct sigaction sa;
     sa.sa_handler = handle_kill;
     sigemptyset(&sa.sa_mask);

@@ -92,6 +92,7 @@ bool b_process_exist(pid_t pid)
     return true;
 }
 
+//sleeps for given time or until any of given signal variables is true
 void b_sleep(double time, volatile sig_atomic_t** cond, int cond_n)
 {
     if (time <= 0.0) return;
@@ -132,7 +133,7 @@ void b_sleep(double time, volatile sig_atomic_t** cond, int cond_n)
     }
 }
 
-// microsecond-precision UNIX epoch
+//microsecond-precision UNIX epoch
 double b_tick()
 {
     struct timeval tv;
@@ -151,6 +152,7 @@ float b_randf(float min, float max)
     return min + (float)rand() / RAND_MAX * (max-min);
 }
 
+//uses rejection sampling to remove modulo bias
 int b_randi(int min, int max)
 {
     if (min >= max) return min;

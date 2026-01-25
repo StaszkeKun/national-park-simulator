@@ -19,11 +19,13 @@ int msgid_guide;
 
 int semid;
 
+//shared memory pointers
 shared_data_t* shared_data;
 visitor_data_t* visitors_data;
-guide_data_t* guides_data;
-guide_data_t* my_data;
+guide_data_t* guides_data; //whole guide_data array
+guide_data_t* my_data; //pointer to specific guide_data point with this guide's data
 
+//control variables
 int visitors_in_group;
 int visitors_checkins;
 double update_time;
@@ -111,6 +113,7 @@ void init()
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = 0;
     sigaction(SIGXCPU, &sa, NULL);
+    sigaction(SIGTERM, &sa, NULL);
 
     sigset_t set;
     sigemptyset(&set);
@@ -144,6 +147,7 @@ void operate()
 {
     switch (my_data->status)
     {
+        //gathers visitors and manages departures time
         case GS_GATHERING_GROUP:
         {
             visitors_in_group = 0;
@@ -183,6 +187,7 @@ void operate()
                     double now = b_get_time_of_day(shared_data->start_time);
                     if (now > OPEN_TIME)
                     {
+                        //prevents checking through the night
                         b_sleep(CYCLE_TIME - now, (volatile sig_atomic_t* []){&kill_requested}, 1);
                     }
                     else
@@ -242,6 +247,7 @@ void operate()
             my_data->status = GS_AT_CASH;
             break;
         }
+        //manage access to the bridge and check if group crossed
         case GS_AT_BRIDGE:
         {
             printf("[GUIDE %d]: arrived at bridge\n", my_id);
@@ -310,6 +316,7 @@ void operate()
 
             if (leave_park || kill_requested) break;
 
+            //alerting group to start passing happens in this function
             while(!try_pass_bridge())
             {
                 printf("[GUIDE %d]: couldn't pass\n", my_id);
@@ -432,6 +439,7 @@ void operate()
 
             break;
         }
+        //sends group to queue and waits for their return
         case GS_AT_TOWER:
         {
             printf("[GUIDE %d]: arrived at tower\n", my_id);
@@ -466,6 +474,7 @@ void operate()
 
             break;
         }
+        //manage boarding/steering the ferry
         case GS_AT_FERRY:
         {
             printf("[GUIDE %d]: arrived at ferry\n", my_id);
@@ -530,6 +539,7 @@ void operate()
             }
 
             if (kill_requested || leave_park) break;
+            //diffrent from bridge alerting group doesn't happen here but later
             while(!try_board_ferry())
             {
                 printf("[GUIDE %d]: couldnt board\n", my_id);
@@ -609,6 +619,7 @@ void operate()
 
             visitors_checkins = 0;
 
+            //alert group to start boarding
             for(int i = 0; i < my_data->group_count; i++)
             {
                 my_data->groups[i]->status = VS_AT_FERRY_BOARDING;
@@ -629,7 +640,7 @@ void operate()
             shared_data->ferry_groups_boarded++;
             printf("[GUIDE %d]: group boarded\n", my_id);
 
-
+            //manage starting/waiting
             if (ferry_leader)
             {
                 if (clockwise_track && (shared_data->ferry_queue_clockwise.count != 0 || shared_data->ferry_vipqueue_clockwise.count != 0))
@@ -691,6 +702,7 @@ void operate()
                 if (kill_requested) break;
             }
 
+            //alert group to start disboarding
             for(int i = 0; i < my_data->group_count; i++) b_signal(my_data->groups[i]->pid, SIG_WAKE_UP);
 
             visitors_checkins = 0;

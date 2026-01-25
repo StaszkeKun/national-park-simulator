@@ -16,7 +16,7 @@ typedef struct
     pid_t cashier_pid;
 
     //bridge managing
-    bool bridge_direction; //true (K=>A=>B) //false(B=>A=>K)
+    bool bridge_direction; //true (clockwise) //false (anticlockwise)
     int groups_on_bridge;
     float bridge_crosstime;
     ringbuffer_t bridge_queue_clockwise;
@@ -29,7 +29,7 @@ typedef struct
     float tower_downtime;
 
     //ferry managing
-    bool ferry_side; //true (B side) //false (K side)
+    bool ferry_side; //true (clockwise) //false (anticlockwise)
     int ferry_seats_taken;
     int ferry_groups_boarded;
     pid_t ferry_seats[FERRY_LIMIT];

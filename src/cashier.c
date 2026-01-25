@@ -14,16 +14,20 @@ int msgid;
 int fifo_regular = -1;
 int fifo_vip = -1;
 struct pollfd fds[2];
-pid_t current_pid;
+
+//shared memory pointers
 shared_data_t* shared_data;
 visitor_data_t* visitors_data;
 guide_data_t* guides_data;
+
+//raport variables
 unsigned long visitors_pids[VISITORS_LIMIT];
 unsigned int visitors_today = 0;
 unsigned int gold_today = 0;
 bool setup_today = false;
 unsigned int day = 0;
 
+//kills and logs leaving visitors
 pthread_t leaving_thread = 0;
 void* print_leaving(void* arg)
 {
@@ -65,8 +69,11 @@ int main()
 {
     init();
 
+    pid_t current_pid;
+
     while(!kill_requested)
     {
+        //setup for new day
         if (b_get_time_of_day(shared_data->start_time) <= OPEN_TIME && !setup_today)
         {
             visitors_today = 0;
@@ -76,6 +83,7 @@ int main()
             printf("//////////DAY %d//////////\n", day);
         }
 
+        //tell visitors to leave and flush waiting queue
         if (b_get_time_of_day(shared_data->start_time) > OPEN_TIME && setup_today)
         {
             printf("//////////NIGHT FELL//////////\n");
@@ -104,6 +112,7 @@ int main()
             setup_today = false;
         }
 
+        //waits for fifo events
         if (!wait_for_visitor()) continue;
 
         //VIP queue
@@ -157,6 +166,7 @@ void init()
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = 0;
     sigaction(SIGXCPU, &sa, NULL);
+    sigaction(SIGTERM, &sa, NULL);
 
     sigset_t set;
     sigemptyset(&set);
@@ -261,7 +271,7 @@ void sell_ticket(visitor_data_t* visitor_data)
     }
     visitor_data->status = VS_AWAITING_GUIDE;
 
-    while (b_msq_available_slots(msgid) <= 1)
+    while(b_msq_available_slots(msgid) <= 1)
     {
         b_sleep(0.01, NULL, 0); //this is extremely unlikely to happen
     }

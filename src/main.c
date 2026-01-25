@@ -7,6 +7,7 @@
 #include "utils.h"
 #include <sys/wait.h>
 #include <sys/resource.h>
+#include <sys/sysinfo.h>
 
 void check_configuration();
 void init();
@@ -70,7 +71,6 @@ int main()
 void init()
 {
     printf("ADD COMMENTS\n");
-    printf("LIMITS ON RAM AND PROC COUNT\n");
     struct sigaction sa;
     sa.sa_handler = handle_kill;
     sigemptyset(&sa.sa_mask);
@@ -178,7 +178,7 @@ void check_configuration()
         exit(EXIT_FAILURE);
     }
 
-    if (FERRY_LIMIT >= 1.5 * GROUP_SIZE)
+    if (FERRY_LIMIT * 2 >= 3 * GROUP_SIZE)
     {
         errno = EDOM;
         perror("[ERROR]: FERRY_LIMIT must be lower than 1.5*GROUP_SIZE");
@@ -204,27 +204,51 @@ void check_configuration()
     {
         perror("[ERROR]: getrlimit error");
     }
-
-    if (rl.rlim_cur != RLIM_INFINITY)
+    else
     {
-        fprintf(stderr, "[WARNING]: simulation will close after %ld seconds due to limits\n", rl.rlim_cur);
+        if (rl.rlim_cur != RLIM_INFINITY)
+        {
+            fprintf(stderr, "[WARNING]: simulation will close after %ld seconds due to limits\n", rl.rlim_cur);
+        }
     }
 
     if (getrlimit(RLIMIT_NPROC, &rl) != 0)
     {
         perror("[ERROR]: getrlimit error");
     }
-
-    if (rl.rlim_cur <= 1 + 2 + GUIDES_NUMBER)
+    else
     {
-        errno = EDOM;
-        perror("[ERROR]: limits on number of processes is to little");
-        exit(EXIT_FAILURE);
+        if (rl.rlim_cur != RLIM_INFINITY && rl.rlim_cur <= 1 + 2 + GUIDES_NUMBER)
+        {
+            errno = ENOMEM;
+            perror("[ERROR]: limits on number of processes is to little");
+            exit(EXIT_FAILURE);
+        }
+    
+        if (rl.rlim_cur != RLIM_INFINITY && rl.rlim_cur < 1 + 2 + GUIDES_NUMBER + VISITORS_LIMIT)
+        {
+            fprintf(stderr, "[WARNING]: due to limits there could be errors when there is too many visitors\n");
+        }
     }
 
-    if (rl.rlim_cur < 1 + 2 + GUIDES_NUMBER + VISITORS_LIMIT)
+    struct sysinfo info;
+    if (sysinfo(&info) != 0)
     {
-        fprintf(stderr, "[WARNING]: due to limits there could be errors when there is too many visitors\n");
+        perror("[ERROR]: sysinfo() error");
+    }
+    else
+    {
+        if ((2 + GUIDES_NUMBER + VISITORS_LIMIT)*3000UL > info.freeram * info.mem_unit * 8 / 10 / 1024)
+        {
+            errno = ENOMEM;
+            perror("[ERROR]: VISITORS_LIMIT is too much for available RAM");
+            exit(EXIT_FAILURE);
+        }
+    
+        if ((2 + GUIDES_NUMBER + VISITORS_LIMIT)*3000UL > 2*1024*1024)
+        {
+            fprintf(stderr, "[WARNING]: this amount of visitors could take at most around %ldMB\n", (2 + GUIDES_NUMBER + VISITORS_LIMIT)*3000UL/1024);
+        }
     }
 
     if (VISITORS_LIMIT <= 0)

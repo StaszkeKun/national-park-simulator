@@ -130,7 +130,7 @@ int main()
             continue;
         }
 
-        if (1 + current_visitor_data->kids_count + visitors_today >= VISITORS_LIMIT)
+        if (1 + current_visitor_data->kids_count + visitors_today > VISITORS_LIMIT)
         {
             printf("[CASHIER]: Visitor %d with %d kids dismissed - daily visitor limit\n", current_pid, current_visitor_data->kids_count);
             current_visitor_data->status = VS_LEAVING;

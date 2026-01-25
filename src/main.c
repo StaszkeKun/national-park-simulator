@@ -70,12 +70,13 @@ int main()
 void init()
 {
     printf("ADD COMMENTS\n");
-    printf("ADD TESTS\n");
+    printf("LIMITS ON RAM AND PROC COUNT\n");
     struct sigaction sa;
     sa.sa_handler = handle_kill;
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = 0;
     sigaction(SIGINT, &sa, NULL);
+    sigaction(SIGTERM, &sa, NULL);
     sigaction(SIGXCPU, &sa, NULL);
 
     sa.sa_handler = handle_child;
@@ -166,7 +167,7 @@ void check_configuration()
     if (BRIDGE_LIMIT >= GROUP_SIZE)
     {
         errno = EDOM;
-        perror("[ERROR]: BRIGE_LIMIT must be lower than GROUP_SIZE");
+        perror("[ERROR]: BRIDGE_LIMIT must be lower than GROUP_SIZE");
         exit(EXIT_FAILURE);
     }
 

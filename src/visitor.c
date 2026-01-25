@@ -108,8 +108,9 @@ void init()
     srand(getpid() * time(NULL));
 
     if (kill_requested) return;
-    shared_data = b_shm_attach(b_shm_get_id(SHM_SHARED_DATA, sizeof(shared_data_t)));
-    visitors_data = b_shm_attach(b_shm_get_id(SHM_VISITOR_DATA, sizeof(visitor_data_t) * VISITORS_LIMIT));
+    shared_data = b_shm_attach(b_shm_get_id_ifexist(SHM_SHARED_DATA, sizeof(shared_data_t)));
+    visitors_data = b_shm_attach(b_shm_get_id_ifexist(SHM_VISITOR_DATA, sizeof(visitor_data_t) * VISITORS_LIMIT));
+    if (shared_data == NULL || visitors_data == NULL) end_simulation();
 
     if (kill_requested) return;
     fifo_regular = b_fifo_open(TICKET_REGULAR_PATH, O_WRONLY);
@@ -168,6 +169,15 @@ void operate()
             if (my_data->isVIP)
             {
                 printf("[VIP %d]: chosing a direction\n", my_data->pid);
+                if (b_get_time_of_day(shared_data->start_time) > OPEN_TIME)
+                {
+                    printf("[VIP %d]: moving to cashier\n", my_data->pid);
+                    b_sleep(b_randf(GUIDES_MOVETIME_MIN, GUIDES_MOVETIME_MAX), (volatile sig_atomic_t* []){&kill_requested}, 1);
+                    b_msq_send(msgid_cashier, 2, my_data->pid);
+                    my_data->status = VS_AWAITING_TICKET;
+                    break;
+                }
+
                 if (vip_clockwise_track)
                 {
                     printf("[VIP %d]: moving to bridge\n", my_data->pid);
@@ -208,6 +218,15 @@ void operate()
             if (my_data->isVIP)
             {
                 printf("[VIP %d]: arrived at bridge\n", my_data->pid);
+                if (b_get_time_of_day(shared_data->start_time) > OPEN_TIME)
+                {
+                    printf("[VIP %d]: moving to cashier\n", my_data->pid);
+                    b_sleep(b_randf(GUIDES_MOVETIME_MIN, GUIDES_MOVETIME_MAX), (volatile sig_atomic_t* []){&kill_requested}, 1);
+                    b_msq_send(msgid_cashier, 2, my_data->pid);
+                    my_data->status = VS_AWAITING_TICKET;
+                    break;
+                }
+
                 if (vip_clockwise_track)
                 {
                     printf("[VIP %d]: tries adding to bridge queue\n", my_data->pid);
@@ -222,6 +241,18 @@ void operate()
                         b_wait_for_wakeup();
                         printf("[VTP %d]: wake up check if first\n", my_data->pid);
                         if (kill_requested) break;
+                        if (b_get_time_of_day(shared_data->start_time) > OPEN_TIME)
+                        {
+                            b_sem_p(semid, MUTEX_BRIDGE, 1, NULL, 0);
+                            size_t pos_queue = ringbuffer_contains(&shared_data->bridge_queue_clockwise, my_data->pid);
+                            ringbuffer_erase(&shared_data->bridge_queue_clockwise, pos_queue);
+                            b_sem_v(semid, MUTEX_BRIDGE, 1);
+                            printf("[VIP %d]: moving to cashier\n", my_data->pid);
+                            b_sleep(b_randf(GUIDES_MOVETIME_MIN, GUIDES_MOVETIME_MAX), (volatile sig_atomic_t* []){&kill_requested}, 1);
+                            b_msq_send(msgid_cashier, 2, my_data->pid);
+                            my_data->status = VS_AWAITING_TICKET;
+                            break;
+                        }
                     }
                 }
                 else
@@ -238,8 +269,23 @@ void operate()
                         b_wait_for_wakeup();
                         printf("[VTP %d]: wake up check if first\n", my_data->pid);
                         if (kill_requested) break;
+                        if (b_get_time_of_day(shared_data->start_time) > OPEN_TIME)
+                        {
+                            b_sem_p(semid, MUTEX_BRIDGE, 1, NULL, 0);
+                            size_t pos_queue = ringbuffer_contains(&shared_data->bridge_queue_aclockwise, my_data->pid);
+                            ringbuffer_erase(&shared_data->bridge_queue_aclockwise, pos_queue);
+                            b_sem_v(semid, MUTEX_BRIDGE, 1);
+                            printf("[VIP %d]: moving to cashier\n", my_data->pid);
+                            b_sleep(b_randf(GUIDES_MOVETIME_MIN, GUIDES_MOVETIME_MAX), (volatile sig_atomic_t* []){&kill_requested}, 1);
+                            b_msq_send(msgid_cashier, 2, my_data->pid);
+                            my_data->status = VS_AWAITING_TICKET;
+                            break;
+                        }
                     }
                 }
+
+                if (kill_requested) break;
+                if (b_get_time_of_day(shared_data->start_time) > OPEN_TIME && my_data->status == VS_AWAITING_TICKET) break;
 
                 while(!try_pass_bridge_vip())
                 {
@@ -247,7 +293,41 @@ void operate()
                     b_wait_for_wakeup();
                     printf("[VIP %d]: wake up trypass\n", my_data->pid);
                     if (kill_requested) break;
+                    if (b_get_time_of_day(shared_data->start_time) > OPEN_TIME)
+                    {
+                        b_sem_p(semid, MUTEX_BRIDGE, 1, NULL, 0);
+                        if (vip_clockwise_track)
+                        {
+                            size_t pos_queue = ringbuffer_contains(&shared_data->bridge_queue_clockwise, my_data->pid);
+                            ringbuffer_erase(&shared_data->bridge_queue_clockwise, pos_queue);
+                            if (shared_data->bridge_queue_clockwise.count > 0)
+                            {
+                                pid_t next;
+                                ringbuffer_at(&shared_data->bridge_queue_clockwise, 0, &next);
+                                b_signal(next, SIG_WAKE_UP);
+                            }
+                        }
+                        else
+                        {
+                            size_t pos_queue = ringbuffer_contains(&shared_data->bridge_queue_aclockwise, my_data->pid);
+                            ringbuffer_erase(&shared_data->bridge_queue_aclockwise, pos_queue);
+                            if (shared_data->bridge_queue_aclockwise.count > 0)
+                            {
+                                pid_t next;
+                                ringbuffer_at(&shared_data->bridge_queue_aclockwise, 0, &next);
+                                b_signal(next, SIG_WAKE_UP);
+                            }
+                        }
+                        b_sem_v(semid, MUTEX_BRIDGE, 1);
+                        printf("[VIP %d]: moving to cashier\n", my_data->pid);
+                        b_sleep(b_randf(GUIDES_MOVETIME_MIN, GUIDES_MOVETIME_MAX), (volatile sig_atomic_t* []){&kill_requested}, 1);
+                        b_msq_send(msgid_cashier, 2, my_data->pid);
+                        my_data->status = VS_AWAITING_TICKET;
+                        break;
+                    }
                 }
+
+                if (b_get_time_of_day(shared_data->start_time) > OPEN_TIME && my_data->status == VS_AWAITING_TICKET) break;
 
                 b_sem_p(semid, MUTEX_BRIDGE, 1, (volatile sig_atomic_t* []){&kill_requested}, 1);
 
@@ -309,6 +389,15 @@ void operate()
                 b_sem_v(semid, MUTEX_BRIDGE, 1);
                 printf("[VIP %d]: left bridge\n", my_data->pid);
 
+                if (b_get_time_of_day(shared_data->start_time) > OPEN_TIME)
+                {
+                    printf("[VIP %d]: moving to cashier\n", my_data->pid);
+                    b_sleep(b_randf(GUIDES_MOVETIME_MIN, GUIDES_MOVETIME_MAX), (volatile sig_atomic_t* []){&kill_requested}, 1);
+                    b_msq_send(msgid_cashier, 2, my_data->pid);
+                    my_data->status = VS_AWAITING_TICKET;
+                    break;
+                }
+
                 if (vip_clockwise_track)
                 {
                     printf("[VIP %d]: moving to tower\n", my_data->pid);
@@ -320,7 +409,7 @@ void operate()
                     printf("[VIP %d]: moving to cashier\n", my_data->pid);
                     b_sleep(b_randf(GUIDES_MOVETIME_MIN, GUIDES_MOVETIME_MAX), (volatile sig_atomic_t* []){&kill_requested}, 1);
                     b_msq_send(msgid_cashier, 2, my_data->pid);
-                    b_wait_for_wakeup();
+                    my_data->status = VS_AWAITING_TICKET;
                 }
 
                 break;
@@ -424,6 +513,15 @@ void operate()
 
             if (my_data->isVIP)
             {
+                if (b_get_time_of_day(shared_data->start_time) > OPEN_TIME)
+                {
+                    printf("[VIP %d]: moving to cashier\n", my_data->pid);
+                    b_sleep(b_randf(GUIDES_MOVETIME_MIN, GUIDES_MOVETIME_MAX), (volatile sig_atomic_t* []){&kill_requested}, 1);
+                    b_msq_send(msgid_cashier, 2, my_data->pid);
+                    my_data->status = VS_AWAITING_TICKET;
+                    break;
+                }
+
                 if (vip_clockwise_track)
                 {
                     printf("[VIP %d]: moving to ferry\n", my_data->pid);
@@ -457,6 +555,15 @@ void operate()
             {
                 printf("[VIP %d]: arrived at ferry\n", my_data->pid);
 
+                if (b_get_time_of_day(shared_data->start_time) > OPEN_TIME)
+                {
+                    printf("[VIP %d]: moving to cashier\n", my_data->pid);
+                    b_sleep(b_randf(GUIDES_MOVETIME_MIN, GUIDES_MOVETIME_MAX), (volatile sig_atomic_t* []){&kill_requested}, 1);
+                    b_msq_send(msgid_cashier, 2, my_data->pid);
+                    my_data->status = VS_AWAITING_TICKET;
+                    break;
+                }
+
                 if (vip_clockwise_track)
                 {
                     printf("[VIP %d]: tries adding to ferry vip queue\n", my_data->pid);
@@ -472,6 +579,18 @@ void operate()
                         b_wait_for_wakeup();
                         printf("[VIP %d]: wake up check if first\n", my_data->pid);
                         if (kill_requested) break;
+                        if (b_get_time_of_day(shared_data->start_time) > OPEN_TIME)
+                        {
+                            b_sem_p(semid, MUTEX_FERRY, 1, NULL, 0);
+                            size_t pos_queue = ringbuffer_contains(&shared_data->ferry_vipqueue_clockwise, my_data->pid);
+                            ringbuffer_erase(&shared_data->ferry_vipqueue_clockwise, pos_queue);
+                            b_sem_v(semid, MUTEX_FERRY, 1);
+                            printf("[VIP %d]: moving to cashier\n", my_data->pid);
+                            b_sleep(b_randf(GUIDES_MOVETIME_MIN, GUIDES_MOVETIME_MAX), (volatile sig_atomic_t* []){&kill_requested}, 1);
+                            b_msq_send(msgid_cashier, 2, my_data->pid);
+                            my_data->status = VS_AWAITING_TICKET;
+                            break;
+                        }
                     }
                 }
                 else
@@ -489,17 +608,65 @@ void operate()
                         b_wait_for_wakeup();
                         printf("[VIP %d]: wake up check if first\n", my_data->pid);
                         if (kill_requested) break;
+                        if (b_get_time_of_day(shared_data->start_time) > OPEN_TIME)
+                        {
+                            b_sem_p(semid, MUTEX_FERRY, 1, NULL, 0);
+                            size_t pos_queue = ringbuffer_contains(&shared_data->ferry_vipqueue_aclockwise, my_data->pid);
+                            ringbuffer_erase(&shared_data->ferry_vipqueue_aclockwise, pos_queue);
+                            b_sem_v(semid, MUTEX_FERRY, 1);
+                            printf("[VIP %d]: moving to cashier\n", my_data->pid);
+                            b_sleep(b_randf(GUIDES_MOVETIME_MIN, GUIDES_MOVETIME_MAX), (volatile sig_atomic_t* []){&kill_requested}, 1);
+                            b_msq_send(msgid_cashier, 2, my_data->pid);
+                            my_data->status = VS_AWAITING_TICKET;
+                            break;
+                        }
                     }
                 }
 
                 if (kill_requested) break;
+                if (my_data->status == VS_AWAITING_TICKET) break;
+
                 while(!try_board_ferry_vip())
                 {
                     printf("[VIP %d]: couldnt board\n", my_data->pid);
                     b_wait_for_wakeup();
                     printf("[VIP %d]: wake up tryboard\n", my_data->pid);
                     if (kill_requested) break;
+                    if (b_get_time_of_day(shared_data->start_time) > OPEN_TIME)
+                    {
+                        b_sem_p(semid, MUTEX_FERRY, 1, NULL, 0);
+                        if (vip_clockwise_track)
+                        {
+                            size_t pos_queue = ringbuffer_contains(&shared_data->ferry_vipqueue_clockwise, my_data->pid);
+                            ringbuffer_erase(&shared_data->ferry_vipqueue_clockwise, pos_queue);
+                            if (shared_data->ferry_vipqueue_clockwise.count > 0)
+                            {
+                                pid_t next;
+                                ringbuffer_at(&shared_data->ferry_vipqueue_clockwise, 0, &next);
+                                b_signal(next, SIG_WAKE_UP);
+                            }
+                        }
+                        else
+                        {
+                            size_t pos_queue = ringbuffer_contains(&shared_data->ferry_vipqueue_aclockwise, my_data->pid);
+                            ringbuffer_erase(&shared_data->ferry_vipqueue_aclockwise, pos_queue);
+                            if (shared_data->ferry_vipqueue_aclockwise.count > 0)
+                            {
+                                pid_t next;
+                                ringbuffer_at(&shared_data->ferry_vipqueue_aclockwise, 0, &next);
+                                b_signal(next, SIG_WAKE_UP);
+                            }
+                        }
+                        b_sem_v(semid, MUTEX_FERRY, 1);
+                        printf("[VIP %d]: moving to cashier\n", my_data->pid);
+                        b_sleep(b_randf(GUIDES_MOVETIME_MIN, GUIDES_MOVETIME_MAX), (volatile sig_atomic_t* []){&kill_requested}, 1);
+                        b_msq_send(msgid_cashier, 2, my_data->pid);
+                        my_data->status = VS_AWAITING_TICKET;
+                        break;
+                    }
                 }
+
+                if (b_get_time_of_day(shared_data->start_time) > OPEN_TIME && my_data->status == VS_AWAITING_TICKET) break;
 
                 b_sem_p(semid, MUTEX_FERRY, 1, (volatile sig_atomic_t* []){&kill_requested}, 1);
 
@@ -633,13 +800,21 @@ void operate()
                     b_signal(next_first, SIG_WAKE_UP);
                 }
 
+                if (b_get_time_of_day(shared_data->start_time) > OPEN_TIME)
+                {
+                    printf("[VIP %d]: moving to cashier\n", my_data->pid);
+                    b_sleep(b_randf(GUIDES_MOVETIME_MIN, GUIDES_MOVETIME_MAX), (volatile sig_atomic_t* []){&kill_requested}, 1);
+                    b_msq_send(msgid_cashier, 2, my_data->pid);
+                    my_data->status = VS_AWAITING_TICKET;
+                    break;
+                }
+
                 if (vip_clockwise_track)
                 {
                     printf("[VIP %d]: moving to cashier\n", my_data->pid);
                     b_sleep(b_randf(GUIDES_MOVETIME_MIN, GUIDES_MOVETIME_MAX), (volatile sig_atomic_t* []){&kill_requested}, 1);
                     b_msq_send(msgid_cashier, 2, my_data->pid);
-                    b_wait_for_wakeup();
-                    if (kill_requested) break;
+                    my_data->status = VS_AWAITING_TICKET;
                 }
                 else
                 {

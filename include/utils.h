@@ -225,6 +225,7 @@ void b_shm_remove(int shmid)
 
 void* b_shm_attach(int shmid)
 {
+    if (shmid == -1) return NULL;
     void* ptr = shmat(shmid, 0, 0);
     if (ptr == (void*)-1)
     {

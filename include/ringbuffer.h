@@ -97,6 +97,7 @@ void ringbuffer_erase(ringbuffer_t* buf, size_t pos)
             buf->data[idx] = buf->data[next];
             idx = next;
         }
+        buf->tail_idx = (buf->tail_idx + buf->capacity - 1) % buf->capacity;
     }
 
     buf->count--;

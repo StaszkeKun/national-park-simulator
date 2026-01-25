@@ -308,6 +308,8 @@ void operate()
                 }
             }
 
+            if (leave_park || kill_requested) break;
+
             while(!try_pass_bridge())
             {
                 printf("[GUIDE %d]: couldn't pass\n", my_id);
@@ -527,7 +529,7 @@ void operate()
                 }
             }
 
-            if (kill_requested) break;
+            if (kill_requested || leave_park) break;
             while(!try_board_ferry())
             {
                 printf("[GUIDE %d]: couldnt board\n", my_id);

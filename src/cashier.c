@@ -35,15 +35,15 @@ void* print_leaving(void* arg)
         visitor_data = b_get_visitor_by_pid(visitors_data, visitor_pid);
         if (visitor_data->isVIP)
         {
-            //printf("[CASHIER]: VIP %ld left\n", visitor_pid);
+            printf("[CASHIER]: VIP %ld left\n", visitor_pid);
             visitor_data->status = VS_LEAVING;
-            b_signal(visitor_pid, SIG_WAKE_UP);
+            b_signal(visitor_pid, SIGINT);
         }
         else
         {
-            //printf("[CASHIER]: Visitor %ld with %d kids left\n", visitor_pid, visitor_data->kids_count);
+            printf("[CASHIER]: Visitor %ld with %d kids left\n", visitor_pid, visitor_data->kids_count);
             visitor_data->status = VS_LEAVING;
-            b_signal(visitor_pid, SIG_WAKE_UP);
+            b_signal(visitor_pid, SIGINT);
         }
     }
     return NULL;
@@ -83,6 +83,13 @@ int main()
             {
                 b_signal(guides_data[i].pid, SIG_LEAVE_PARK);
             }
+            for(int i = 0; i < VISITORS_LIMIT; i++)
+            {
+                if (b_process_exist(visitors_data[i].pid))
+                {
+                    b_signal(visitors_data[i].pid, SIG_WAKE_UP);
+                }
+            }
             while(true)
             {
                 long pid_in_queue = b_msq_receive_nowait(msgid, 1);
@@ -117,7 +124,7 @@ int main()
 
         if (b_get_time_of_day(shared_data->start_time) > OPEN_TIME)
         {
-            //printf("[CASHIER]: Visitor %d with %d kids dismissed - closing hours\n", current_pid, current_visitor_data->kids_count);
+            printf("[CASHIER]: Visitor %d with %d kids dismissed - closing hours\n", current_pid, current_visitor_data->kids_count);
             current_visitor_data->status = VS_LEAVING;
             b_signal(current_pid, SIGINT);
             continue;
@@ -125,7 +132,7 @@ int main()
 
         if (1 + current_visitor_data->kids_count + visitors_today >= VISITORS_LIMIT)
         {
-            //printf("[CASHIER]: Visitor %d with %d kids dismissed - daily visitor limit\n", current_pid, current_visitor_data->kids_count);
+            printf("[CASHIER]: Visitor %d with %d kids dismissed - daily visitor limit\n", current_pid, current_visitor_data->kids_count);
             current_visitor_data->status = VS_LEAVING;
             b_signal(current_pid, SIGINT);
             continue;
@@ -221,7 +228,7 @@ void sell_ticket(visitor_data_t* visitor_data)
     if (visitor_data->isVIP)
     {
         b_signal(visitor_data->pid, SIG_WAKE_UP);
-        //printf("[CASHIER]: let VIP %d in\n", visitor_data->pid);
+        printf("[CASHIER]: let VIP %d in\n", visitor_data->pid);
         visitors_pids[visitors_today] = visitor_data->pid;
         visitors_today++;
         visitor_data->status = VS_AWAITING_GUIDE; //this tells VIP to choose a direction and start going by themselves
@@ -246,11 +253,11 @@ void sell_ticket(visitor_data_t* visitor_data)
 
     gold_today += sum;
 
-    //printf("[CASHIER]: sold %d ticket(s) to %d with %d kids\n", sold, visitor_data->pid, visitor_data->kids_count);
-    //printf("[CASHIER]: let visitor %d in\n", visitor_data->pid);
+    printf("[CASHIER]: sold %d ticket(s) to %d with %d kids\n", sold, visitor_data->pid, visitor_data->kids_count);
+    printf("[CASHIER]: let visitor %d in\n", visitor_data->pid);
     for(int i = 0; i < visitor_data->kids_count; i++)
     {
-        //printf("[CASHIER]: let kid %ld in under visitor %d protection\n", visitor_data->kids[i].tid, visitor_data->pid);
+        printf("[CASHIER]: let kid %ld in under visitor %d protection\n", visitor_data->kids[i].tid, visitor_data->pid);
     }
     visitor_data->status = VS_AWAITING_GUIDE;
     b_msq_send(msgid, 1, visitor_data->pid);

@@ -36,6 +36,7 @@ void* print_leaving(void* arg)
     while(true)
     {
         long visitor_pid = b_msq_receive(msgid, 2);
+        b_raise(SIG_WAKE_UP);
         visitor_data = b_get_visitor_by_pid(visitors_data, visitor_pid);
         if (visitor_data->isVIP)
         {
@@ -161,12 +162,12 @@ void init()
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = 0;
     sigaction(SIGINT, &sa, NULL);
+    sigaction(SIGTERM, &sa, NULL);
 
     sa.sa_handler = SIG_IGN;
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = 0;
     sigaction(SIGXCPU, &sa, NULL);
-    sigaction(SIGTERM, &sa, NULL);
 
     sigset_t set;
     sigemptyset(&set);
@@ -273,7 +274,7 @@ void sell_ticket(visitor_data_t* visitor_data)
 
     while(b_msq_available_slots(msgid) <= 1)
     {
-        b_sleep(0.01, NULL, 0); //this is extremely unlikely to happen
+        b_wait_for_wakeup(); //this helps leave 1 message slot available preventing deadlocks
     }
 
     b_msq_send(msgid, 1, visitor_data->pid);

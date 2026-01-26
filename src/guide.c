@@ -82,6 +82,10 @@ int main(int argc, char *argv[])
 
     init();
 
+    #ifdef asleep_guide
+    b_sleep(30, (volatile sig_atomic_t* []){&kill_requested}, 1);
+    #endif
+
     while(!kill_requested)
     {
         operate();
@@ -98,6 +102,7 @@ void init()
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = 0;
     sigaction(SIGINT, &sa, NULL);
+    sigaction(SIGTERM, &sa, NULL);
 
     sa.sa_handler = handle_leave_park;
     sigemptyset(&sa.sa_mask);
@@ -113,7 +118,6 @@ void init()
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = 0;
     sigaction(SIGXCPU, &sa, NULL);
-    sigaction(SIGTERM, &sa, NULL);
 
     sigset_t set;
     sigemptyset(&set);
@@ -154,6 +158,7 @@ void operate()
             while(true)
             {
                 long visitor_pid = b_msq_receive_nowait(msgid_cashier, 1);
+                b_signal(shared_data->cashier_pid, SIG_WAKE_UP);
 
                 if (visitor_pid != 0)
                 {

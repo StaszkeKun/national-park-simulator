@@ -80,7 +80,7 @@ void init()
 
     sa.sa_handler = handle_child;
     sigemptyset(&sa.sa_mask);
-    sa.sa_flags = SA_NOCLDSTOP | SA_NOCLDWAIT;
+    sa.sa_flags = SA_NOCLDSTOP | SA_NOCLDWAIT; //this makes waiting for child processes unnecessary
     sigaction(SIGCHLD, &sa, NULL);
 
     sa.sa_handler = SIG_IGN;

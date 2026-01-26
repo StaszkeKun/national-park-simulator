@@ -21,6 +21,22 @@ key_t _get_key(int id)
     return ftok(".", id);
 }
 
+void b_signal(pid_t target, int signal)
+{
+    if (kill(target, signal) < 0)
+    {
+        if (errno == ESRCH) return;
+        char msg[64];
+        snprintf(msg, sizeof(msg), "[ERROR]: signal (%d) sending error to (%d)", signal, target);
+        perror(msg);
+    }
+}
+
+void b_raise(int signal)
+{
+    b_signal(getpid(), signal);
+}
+
 pid_t b_execute(char* path, char* arg1)
 {
     pid_t new_pid = fork();
@@ -28,6 +44,7 @@ pid_t b_execute(char* path, char* arg1)
     if (new_pid == -1)
     {
         perror("[ERROR]: fork error");
+        b_raise(SIGINT);
         return -1;
     }
 
@@ -52,22 +69,6 @@ pthread_t b_execute_thread(void* (*func)(void *))
         exit(EXIT_FAILURE);
     }
     return tid;
-}
-
-void b_signal(pid_t target, int signal)
-{
-    if (kill(target, signal) < 0)
-    {
-        if (errno == ESRCH) return;
-        char msg[64];
-        snprintf(msg, sizeof(msg), "[ERROR]: signal (%d) sending error to (%d)", signal, target);
-        perror(msg);
-    }
-}
-
-void b_raise(int signal)
-{
-    b_signal(getpid(), signal);
 }
 
 void b_wait_for_wakeup()
@@ -207,7 +208,6 @@ int b_shm_get_id_ifexist(int id, size_t size)
     {
         if (errno == ENOENT)
         {
-            printf("specified shared memory doesn't exist\n");
             return -1;
         }
         perror("[ERROR]: Shared memory get id error");

@@ -176,13 +176,7 @@ void operate()
                         b_sleep(GUIDES_GATHER_CHECK_INTERVAL, (volatile sig_atomic_t* []){&kill_requested, &leave_park}, 2);
                     }
                 }
-
-                if (visitors_in_group >= GROUP_SIZE) break;
-                if (visitors_in_group > 0 && (b_tick() - update_time > GUIDES_GATHER_WAIT || b_get_time_of_day(shared_data->start_time) > OPEN_TIME)) break;
-                if (kill_requested) break;
-                if (visitors_in_group > 0 && leave_park) break;
-
-                if (visitor_pid == 0)
+                else
                 {
                     double now = b_get_time_of_day(shared_data->start_time);
                     if (now > OPEN_TIME)
@@ -195,6 +189,12 @@ void operate()
                         b_sleep(GUIDES_GATHER_CHECK_INTERVAL, (volatile sig_atomic_t* []){&kill_requested}, 1);
                     }
                 }
+
+
+                if (visitors_in_group >= GROUP_SIZE) break;
+                if (visitors_in_group > 0 && (b_tick() - update_time > GUIDES_GATHER_WAIT || b_get_time_of_day(shared_data->start_time) > OPEN_TIME)) break;
+                if (kill_requested) break;
+                if (visitors_in_group > 0 && leave_park) break;
             }
 
             int random = b_randi(0, 100);

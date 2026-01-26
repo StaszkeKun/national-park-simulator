@@ -14,14 +14,14 @@
 #define CYCLE_TIME (OPEN_TIME + CLOSE_TIME)
 
 #ifdef big_numbers
-#define VISITORS_LIMIT 1000
-#define GUIDES_NUMBER 10
+#define VISITORS_LIMIT 5000
+#define GUIDES_NUMBER 25
 #define GROUP_SIZE 25
 #define BRIDGE_LIMIT 20
 #define TOWER_LIMIT 35
 #define FERRY_LIMIT 30
 #else
-#define VISITORS_LIMIT 200 //number of visitors that can enter in a single day
+#define VISITORS_LIMIT 100 //number of visitors that can enter in a single day
 #define GUIDES_NUMBER 5 //number of guides working
 #define GROUP_SIZE 7 //maximal size of guide's group (visitors + kids)
 #define BRIDGE_LIMIT 6 //limit of people allowed on bridge at once
@@ -71,9 +71,10 @@
 #ifdef big_numbers
 #define VISITOR_SPAWN_MIN_INTERVAL 0.05
 #define VISITOR_SPAWN_MAX_INTERVAL 0.05
+#define TICKET_SALE_TIME 0
 #else
-#define VISITOR_SPAWN_MIN_INTERVAL 0.5 //lower boundry of time (in seconds) between visitors arrivals
-#define VISITOR_SPAWN_MAX_INTERVAL 1 //upper boundry of time (in seconds) between visitors arrivals
+#define VISITOR_SPAWN_MIN_INTERVAL 0.2 //lower boundry of time (in seconds) between visitors arrivals
+#define VISITOR_SPAWN_MAX_INTERVAL 0.5 //upper boundry of time (in seconds) between visitors arrivals
+#define TICKET_SALE_TIME 0.2 //time (in seconds) it takes to process a visitor entry
 #endif
-#define TICKET_SALE_TIME 1 //time (in seconds) it takes to process a visitor entry
 #endif

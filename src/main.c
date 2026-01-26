@@ -233,6 +233,7 @@ void check_configuration()
         }
     }
 
+    /* this is obsolete and was used to warn about sanitizers memory overhead
     struct sysinfo info;
     if (sysinfo(&info) != 0)
     {
@@ -251,7 +252,7 @@ void check_configuration()
         {
             fprintf(stderr, "[WARNING]: this amount of visitors could take at most around %ldMB\n", (2 + GUIDES_NUMBER + VISITORS_LIMIT)*3000UL/1024);
         }
-    }
+    }*/
 
     if (VISITORS_LIMIT <= 0)
     {

@@ -46,6 +46,9 @@
 #endif
 
 #ifdef asleep_guide
+#define GUIDE_WAKE_UP_TIME 30 //in seconds
+#define CONSTANT_VISITOR_SPAWN false
+
 #define VISITORS_LIMIT 5000
 #define VISITOR_SPAWN_MIN_INTERVAL 0
 #define VISITOR_SPAWN_MAX_INTERVAL 0
@@ -53,6 +56,27 @@
 #define OPEN_TIME 3600
 #define CLOSE_TIME 3600
 #define VIP_CHANCE 0
+#endif
+
+#ifdef broken_bridge
+#define BRIDGE_FIX_TIME 30 //in seconds
+#define CONSTANT_VISITOR_SPAWN false
+
+#define VISITORS_LIMIT 3000
+#define VISITOR_SPAWN_MIN_INTERVAL 0
+#define VISITOR_SPAWN_MAX_INTERVAL 0
+#define TICKET_SALE_TIME 0
+#define OPEN_TIME 3600
+#define CLOSE_TIME 3600
+#define VIP_CHANCE 0.1
+#define GUIDES_NUMBER 25
+#define BRIDGE_CROSS_MIN_TIME 3
+#define BRIDGE_CROSS_MAX_TIME 3
+#define GUIDES_MOVETIME_MIN 0
+#define GUIDES_MOVETIME_MAX 0
+#define FERRY_VOYAGE_TIME 0
+#define TOWER_ACTION_MIN_TIME 0
+#define TOWER_ACTION_MAX_TIME 0
 #endif
 
 //DEFAULTS
@@ -154,6 +178,10 @@
 
 #ifndef CLOSE_TIME
 #define CLOSE_TIME 20 //duration of night (in seconds)
+#endif
+
+#ifndef CONSTANT_VISITOR_SPAWN
+#define CONSTANT_VISITOR_SPAWN true // if false only VISITORS_LIMIT visitors will spawn
 #endif
 
 #define CYCLE_TIME (OPEN_TIME + CLOSE_TIME)

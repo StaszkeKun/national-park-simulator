@@ -40,11 +40,6 @@ void handle_kill(int sig)
     b_raise(SIG_WAKE_UP);
 }
 
-void handle_wake_up(int sig)
-{
-    (void)sig;
-}
-
 volatile sig_atomic_t leave_park = 0;
 void handle_leave_park(int sig)
 {
@@ -83,7 +78,7 @@ int main(int argc, char *argv[])
     init();
 
     #ifdef asleep_guide
-    b_sleep(30, (volatile sig_atomic_t* []){&kill_requested}, 1);
+    b_sleep(GUIDE_WAKE_UP_TIME, (volatile sig_atomic_t* []){&kill_requested}, 1);
     #endif
 
     while(!kill_requested)
@@ -361,9 +356,9 @@ void operate()
 
             b_sem_p(semid, MUTEX_BRIDGE, 1, (volatile sig_atomic_t* []){&kill_requested}, 1);
 
-            printf("[GUIDE %d]: started crossing bridge\n", my_id);
             if (clockwise_track)
             {
+                printf("[GUIDE %d - clockwise]: started crossing bridge\n", my_id);
                 ringbuffer_pop_front(&shared_data->bridge_queue_clockwise, NULL);
                 if (shared_data->bridge_queue_clockwise.count > 0)
                 {
@@ -374,6 +369,7 @@ void operate()
             }
             else
             {
+                printf("[GUIDE %d - aclockwise]: started crossing bridge\n", my_id);
                 ringbuffer_pop_front(&shared_data->bridge_queue_aclockwise, NULL);
                 if (shared_data->bridge_queue_aclockwise.count > 0)
                 {
@@ -813,6 +809,8 @@ bool try_pass_bridge()
         if (shared_data->groups_on_bridge == 0)
         {
             shared_data->bridge_direction = clockwise_track;
+            if (clockwise_track) printf("[GUIDE %d - clockwise]: changing bridge direction\n", my_id);
+            else printf("[GUIDE %d - aclockwise]: changing bridge direction\n", my_id);
         }
         else
         {

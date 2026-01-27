@@ -54,11 +54,6 @@ void* print_leaving(void* arg)
     return NULL;
 }
 
-void handle_wake_up(int sig)
-{
-    (void)sig;
-}
-
 volatile sig_atomic_t kill_requested = 0;
 void handle_kill(int sig)
 {
@@ -140,7 +135,7 @@ int main()
             continue;
         }
 
-        if (1 + current_visitor_data->kids_count + visitors_today > VISITORS_LIMIT)
+        if (CONSTANT_VISITOR_SPAWN && 1 + current_visitor_data->kids_count + visitors_today > VISITORS_LIMIT)
         {
             printf("[CASHIER]: Visitor %d with %d kids dismissed - daily visitor limit\n", current_pid, current_visitor_data->kids_count);
             current_visitor_data->status = VS_LEAVING;
@@ -230,6 +225,8 @@ void sell_ticket(visitor_data_t* visitor_data)
 {
     b_sleep(TICKET_SALE_TIME, (volatile sig_atomic_t*[]){&kill_requested}, 1);
 
+    if (kill_requested) return;
+
     int sum = 0;
     int sold = 0;
     if (visitor_data->isVIP)
@@ -254,8 +251,8 @@ void sell_ticket(visitor_data_t* visitor_data)
             sum += TICKET_PRICE;
             sold++;
         }
-        visitors_pids[visitors_today] = visitor_data->kids[i].tid;
-        visitors_today++;
+        // visitors_pids[visitors_today] = visitor_data->kids[i].tid;
+        // visitors_today++;
     }
 
     gold_today += sum;

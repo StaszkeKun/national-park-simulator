@@ -472,7 +472,6 @@ int b_fifo_open(char* path, int oflag)
     int fd = open(path, oflag);
     if (fd < 0)
     {
-        if (errno != ENXIO) //SILENCED: if there is no cashier a visitor won't even try to join
         perror("[ERROR]: fd open error");
         exit(EXIT_FAILURE);
     }

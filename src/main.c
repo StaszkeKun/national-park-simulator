@@ -33,11 +33,16 @@ void* zombie_cleaner(void* arg)
 {
     (void)arg;
 
+    #ifdef broken_bridge
+    b_sem_p(semid, MUTEX_BRIDGE, 1, NULL, 0);
+    b_sleep(BRIDGE_FIX_TIME, NULL, 0);
+    b_sem_v(semid, MUTEX_BRIDGE, 1);
+    #endif
+    
     while(true)
     {
         wait(NULL);
-        if (errno == ECHILD) break;
-        b_t_sem_v(&visitor_sem);
+        if (CONSTANT_VISITOR_SPAWN) b_t_sem_v(&visitor_sem);
     }
 
     return NULL;
@@ -80,6 +85,10 @@ int main()
 
 void init()
 {
+    printf("IMPLEMENT DAY LIMIT?\n");
+    printf("IMPLEMENT TOWER TEST\n");
+    printf("IMPLEMENT FERRY TEST\n");
+    printf("REVAMP DOCS\n");
     struct sigaction sa;
     sa.sa_handler = handle_kill;
     sigemptyset(&sa.sa_mask);
@@ -88,10 +97,10 @@ void init()
     sigaction(SIGTERM, &sa, NULL);
     sigaction(SIGXCPU, &sa, NULL);
 
-    sa.sa_handler = SIG_IGN;
-    sigemptyset(&sa.sa_mask);
-    sa.sa_flags = 0;
-    sigaction(SIG_WAKE_UP, &sa, NULL);
+    sigset_t set;
+    sigemptyset(&set);
+    sigaddset(&set, SIG_WAKE_UP);
+    sigprocmask(SIG_BLOCK, &set, NULL);
 
     setpgid(0, 0);
 
@@ -158,7 +167,17 @@ void end_simulation()
 {
     b_signal(-getpgrp(), SIGINT);
 
-    if(cleaner_thread) pthread_join(cleaner_thread, NULL);
+    if(cleaner_thread)
+    {
+        pthread_cancel(cleaner_thread);
+        pthread_join(cleaner_thread, NULL);
+    }
+
+    while(true)
+    {
+        wait(NULL);
+        if (errno == ECHILD) break; //wait until every child is collected before destroying IPCs
+    }
 
     b_shm_dettach(shared_data);
     b_shm_remove(b_shm_get_id(SHM_SHARED_DATA, sizeof(shared_data_t)));

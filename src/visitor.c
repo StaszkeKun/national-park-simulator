@@ -12,11 +12,6 @@ bool try_pass_bridge_vip();
 bool try_board_ferry_vip();
 bool check_if_first_secure(void* buf, int mutex);
 
-void handle_wake_up(int sig)
-{
-    (void)sig;
-}
-
 volatile sig_atomic_t kill_requested = 0;
 void handle_kill(int sig)
 {
@@ -111,8 +106,9 @@ void init()
     srand(getpid() * time(NULL));
 
     if (kill_requested) return;
-    fifo_regular = b_fifo_open(TICKET_REGULAR_PATH, O_WRONLY | O_NONBLOCK);
-    fifo_vip = b_fifo_open(TICKET_VIP_PATH, O_WRONLY | O_NONBLOCK);
+    fifo_regular = b_fifo_open(TICKET_REGULAR_PATH, O_WRONLY);
+    if (kill_requested) return;
+    fifo_vip = b_fifo_open(TICKET_VIP_PATH, O_WRONLY);
 
     if (kill_requested) return;
     shared_data = b_shm_attach(b_shm_get_id_ifexist(SHM_SHARED_DATA, sizeof(shared_data_t)));
@@ -336,9 +332,9 @@ void operate()
 
                 b_sem_p(semid, MUTEX_BRIDGE, 1, (volatile sig_atomic_t* []){&kill_requested}, 1);
 
-                printf("[VIP %d]: started crossing bridge\n", my_data->pid);
                 if (vip_clockwise_track)
                 {
+                    printf("[VIP %d - clockwise]: started crossing bridge\n", my_data->pid);
                     ringbuffer_pop_front(&shared_data->bridge_queue_clockwise, NULL);
                     if (shared_data->bridge_queue_clockwise.count > 0)
                     {
@@ -349,6 +345,7 @@ void operate()
                 }
                 else
                 {
+                    printf("[VIP %d - aclockwise]: started crossing bridge\n", my_data->pid);
                     ringbuffer_pop_front(&shared_data->bridge_queue_aclockwise, NULL);
                     if (shared_data->bridge_queue_aclockwise.count > 0)
                     {
@@ -923,6 +920,8 @@ bool try_pass_bridge_vip()
         if (shared_data->groups_on_bridge == 0)
         {
             shared_data->bridge_direction = vip_clockwise_track;
+            if (vip_clockwise_track) printf("[VIP %d - clockwise]: changing bridge direction\n", my_data->pid);
+            else printf("[VIP %d - aclockwise]: changing bridge direction\n", my_data->pid);
         }
         else
         {

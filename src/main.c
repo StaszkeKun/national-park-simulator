@@ -88,7 +88,7 @@ void init()
     printf("IMPLEMENT DAY LIMIT?\n");
     printf("IMPLEMENT TOWER TEST\n");
     printf("IMPLEMENT FERRY TEST\n");
-    printf("REVAMP DOCS\n");
+    printf("RAPORT REVAMP\n");
     struct sigaction sa;
     sa.sa_handler = handle_kill;
     sigemptyset(&sa.sa_mask);

@@ -269,8 +269,9 @@ void operate()
                 printf("[GUIDE %d]: tries adding to bridge queue\n", my_id);
                 b_sem_p(semid, MUTEX_BRIDGE, 1, (volatile sig_atomic_t* []){&kill_requested}, 1);
                 ringbuffer_push_back(&shared_data->bridge_queue_clockwise, my_data->pid);
-                printf("[GUIDE %d]: joined queue at bridge\n", my_id);
                 b_sem_v(semid, MUTEX_BRIDGE, 1);
+                if (kill_requested) break;
+                printf("[GUIDE %d]: joined queue at bridge\n", my_id);
 
                 while(!check_if_first_secure(&shared_data->bridge_queue_clockwise, MUTEX_BRIDGE))
                 {
@@ -293,8 +294,9 @@ void operate()
                 printf("[GUIDE %d]: tries adding to bridge queue\n", my_id);
                 b_sem_p(semid, MUTEX_BRIDGE, 1, (volatile sig_atomic_t* []){&kill_requested}, 1);
                 ringbuffer_push_back(&shared_data->bridge_queue_aclockwise, my_data->pid);
-                printf("[GUIDE %d]: joined queue at bridge\n", my_id);
                 b_sem_v(semid, MUTEX_BRIDGE, 1);
+                if (kill_requested) break;
+                printf("[GUIDE %d]: joined queue at bridge\n", my_id);
 
                 while(!check_if_first_secure(&shared_data->bridge_queue_aclockwise, MUTEX_BRIDGE))
                 {
@@ -759,7 +761,6 @@ void operate()
             leave_park = 0;
             my_data->group_count = 0;
             my_data->status = GS_GATHERING_GROUP;
-            b_signal(shared_data->cashier_pid, SIG_WAKE_UP);
 
             break;
         }

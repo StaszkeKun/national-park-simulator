@@ -8,12 +8,14 @@ void init();
 void end_simulation();
 bool wait_for_visitor();
 void sell_ticket(visitor_data_t* visitor_data);
-void log_today();
+void log_raport(unsigned long pid);
+void end_log();
 
 int msgid;
 int fifo_regular = -1;
 int fifo_vip = -1;
 struct pollfd fds[2];
+FILE* log_file = NULL;
 
 //shared memory pointers
 shared_data_t* shared_data;
@@ -21,8 +23,8 @@ visitor_data_t* visitors_data;
 guide_data_t* guides_data;
 
 //raport variables
-unsigned long visitors_pids[VISITORS_LIMIT];
 unsigned int visitors_today = 0;
+unsigned int kids_today = 0;
 unsigned int gold_today = 0;
 bool setup_today = false;
 unsigned int day = 0;
@@ -72,11 +74,25 @@ int main()
         //setup for new day
         if (b_get_time_of_day(shared_data->start_time) <= OPEN_TIME && !setup_today)
         {
+            if (day != 0) end_log();
+
             visitors_today = 0;
+            kids_today = 0;
             gold_today = 0;
             day++;
             setup_today = true;
             printf("//////////DAY %d//////////\n", day);
+
+            if (log_file != NULL) fclose(log_file);
+            log_file = NULL;
+
+            char title[100];
+            char date[32];
+            time_t s = (time_t)shared_data->start_time;
+            strftime(date, sizeof(date), "%Y-%m-%d_%H:%M:%S", localtime(&s));
+            snprintf(title, sizeof(title), "./logs/%s_day_%d.log", date, day);
+            if (mkdir("./logs", 0755) == -1 && errno != EEXIST) perror("[ERROR] can't create logs directory");
+            log_file = fopen(title, "w");
         }
 
         //tell visitors to leave and flush waiting queue
@@ -104,7 +120,7 @@ int main()
                 b_signal(pid_in_queue, SIGINT);
             }
 
-            log_today();
+            end_log();
             setup_today = false;
         }
 
@@ -196,6 +212,12 @@ void end_simulation()
         pthread_join(leaving_thread, NULL);
     }
 
+    if (kill_requested)
+    {
+        end_log();
+        if (log_file != NULL) fclose(log_file);
+    }
+
     b_shm_dettach(shared_data);
     b_shm_dettach(visitors_data);
     b_shm_dettach(guides_data);
@@ -233,7 +255,7 @@ void sell_ticket(visitor_data_t* visitor_data)
     {
         b_signal(visitor_data->pid, SIG_WAKE_UP);
         printf("[CASHIER]: let VIP %d in\n", visitor_data->pid);
-        visitors_pids[visitors_today] = visitor_data->pid;
+        log_raport(visitor_data->pid);
         visitors_today++;
         visitor_data->status = VS_AWAITING_GUIDE; //this tells VIP to choose a direction and start going by themselves
         b_signal(visitor_data->pid, SIG_WAKE_UP);
@@ -242,7 +264,7 @@ void sell_ticket(visitor_data_t* visitor_data)
 
     sum += TICKET_PRICE;
     sold++;
-    visitors_pids[visitors_today] = visitor_data->pid;
+    log_raport(visitor_data->pid);
     visitors_today++;
     for(int i = 0; i < visitor_data->kids_count; i++)
     {
@@ -251,8 +273,8 @@ void sell_ticket(visitor_data_t* visitor_data)
             sum += TICKET_PRICE;
             sold++;
         }
-        // visitors_pids[visitors_today] = visitor_data->kids[i].tid;
-        // visitors_today++;
+        log_raport(visitor_data->kids[i].tid);
+        kids_today++;
     }
 
     gold_today += sum;
@@ -275,53 +297,28 @@ void sell_ticket(visitor_data_t* visitor_data)
     b_signal(visitor_data->pid, SIG_WAKE_UP);
 }
 
-void log_today()
+void log_raport(unsigned long pid)
 {
-    while(1)
+    if (log_file == NULL)
     {
-        bool all_ready = true;
-        for(int i = 0; i < GUIDES_NUMBER; i++)
-        {
-            if (guides_data[i].group_count > 0 && guides_data[i].status == GS_GATHERING_GROUP)
-            {
-                all_ready = false;
-            }
-        }
-
-        if (all_ready) break;
-
-        b_wait_for_wakeup();
+        printf("[LOG ERROR BACKUP]: %ld\n", pid);
+        return;
     }
 
-    char title[100];
-    char date[32];
-    time_t s = (time_t)shared_data->start_time;
-    strftime(date, sizeof(date), "%Y-%m-%d_%H:%M:%S", localtime(&s));
-    snprintf(title, sizeof(title), "./logs/%s_day_%d.log", date, day);
-    if (mkdir("./logs", 0755) == -1 && errno != EEXIST) perror("[ERROR] can't create logs directory");
-    FILE* file = fopen(title, "w");
-    if (file == NULL)
+    fprintf(log_file, "%ld\n", pid);
+}
+
+void end_log()
+{
+    if (log_file == NULL)
     {
-        perror("[ERROR]: logging error");
         printf("[LOG ERROR BACKUP]: day: %d\n", day);
         printf("[LOG ERROR BACKUP]: gold earned: %d\n", gold_today);
-        printf("[LOG ERROR BACKUP]: visitors entered today: %d\n", visitors_today);
-        printf("[LOG ERROR BACKUP]: visitors entered today:\n");
-        for(unsigned int i = 0; i < visitors_today; i++)
-        {
-            printf("[LOG ERROR BACKUP]: %ld\n", visitors_pids[i]);
-        }
+        printf("[LOG ERROR BACKUP]: visitors entries today: (%d + %d kids)\n", visitors_today, kids_today);
         printf("[LOG ERROR BACKUP]: end\n");
         return;
     }
 
-    fprintf(file, "gold earned: %d\n", gold_today);
-    fprintf(file, "visitors entries today: %d\n", visitors_today);
-    fprintf(file, "visitors entries today:\n");
-    for(unsigned int i = 0; i < visitors_today; i++)
-    {
-        fprintf(file, "%ld\n", visitors_pids[i]);
-    }
-
-    fclose(file);
+    fprintf(log_file, "gold earned: %d\n", gold_today);
+    fprintf(log_file, "visitors entries today: (%d + %d kids)\n", visitors_today, kids_today);
 }

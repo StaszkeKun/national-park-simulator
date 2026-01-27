@@ -236,8 +236,9 @@ void operate()
                     printf("[VIP %d]: tries adding to bridge queue\n", my_data->pid);
                     b_sem_p(semid, MUTEX_BRIDGE, 1, (volatile sig_atomic_t* []){&kill_requested}, 1);
                     ringbuffer_push_back(&shared_data->bridge_queue_clockwise, my_data->pid);
-                    printf("[VIP %d]: joined queue at bridge\n", my_data->pid);
                     b_sem_v(semid, MUTEX_BRIDGE, 1);
+                    if (kill_requested) break;
+                    printf("[VIP %d]: joined queue at bridge\n", my_data->pid);
 
                     while(!check_if_first_secure(&shared_data->bridge_queue_clockwise, MUTEX_BRIDGE))
                     {
@@ -263,8 +264,9 @@ void operate()
                     printf("[VIP %d]: tries adding to bridge queue\n", my_data->pid);
                     b_sem_p(semid, MUTEX_BRIDGE, 1, (volatile sig_atomic_t* []){&kill_requested}, 1);
                     ringbuffer_push_back(&shared_data->bridge_queue_aclockwise, my_data->pid);
-                    printf("[VIP %d]: joined queue at bridge\n", my_data->pid);
                     b_sem_v(semid, MUTEX_BRIDGE, 1);
+                    if (kill_requested) break;
+                    printf("[VIP %d]: joined queue at bridge\n", my_data->pid);
 
                     while(!check_if_first_secure(&shared_data->bridge_queue_aclockwise, MUTEX_BRIDGE))
                     {

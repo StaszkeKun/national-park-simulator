@@ -22,6 +22,7 @@
 
 
 #ifdef no_sleep
+#define VISITORS_LIMIT 500
 #define GUIDES_GATHER_WAIT 0
 #define GUIDES_GATHER_CHECK_INTERVAL 0
 #define GUIDES_MOVETIME_MIN 0

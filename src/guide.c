@@ -206,13 +206,14 @@ void operate()
             clockwise_track = random < 50 ? true : false;
             my_data->status = clockwise_track ? GS_MOVING_TO_BRIDGE : GS_MOVING_TO_FERRY;
 
-            printf("[GUIDE %d]: finished gathering group: %d\n", my_id, visitors_in_group);
-
+            if (kill_requested) break;
             if (visitors_in_group > 0 && (b_get_time_of_day(shared_data->start_time) > OPEN_TIME || leave_park))
             {
                 my_data->status = GS_MOVING_TO_CASH;
                 break;
             }
+
+            printf("[GUIDE %d]: finished gathering group: %d\n", my_id, visitors_in_group);
 
             break;
         }
@@ -280,7 +281,6 @@ void operate()
                 {
                     printf("[GUIDE %d]: is not first in line\n", my_id);
                     b_wait_for_wakeup();
-                    printf("[GUIDE %d]: wake up check if first\n", my_id);
                     if (kill_requested) break;
                     if (leave_park)
                     {
@@ -305,7 +305,6 @@ void operate()
                 {
                     printf("[GUIDE %d]: is not first in line\n", my_id);
                     b_wait_for_wakeup();
-                    printf("[GUIDE %d]: wake up check if first\n", my_id);
                     if (kill_requested) break;
                     if (leave_park)
                     {
@@ -326,7 +325,6 @@ void operate()
             {
                 printf("[GUIDE %d]: couldn't pass\n", my_id);
                 b_wait_for_wakeup();
-                printf("[GUIDE %d]: wake up trypass\n", my_id);
                 if (kill_requested) break;
                 if (leave_park)
                 {
@@ -359,7 +357,7 @@ void operate()
                 }
             }
 
-            if (my_data->status == GS_MOVING_TO_CASH && leave_park) break;
+            if (my_data->status == GS_MOVING_TO_CASH && leave_park || kill_requested) break;
 
             b_sem_p(semid, MUTEX_BRIDGE, 1, (volatile sig_atomic_t* []){&kill_requested}, 1);
 
@@ -407,7 +405,6 @@ void operate()
             shared_data->groups_on_bridge--;
             if (clockwise_track)
             {
-                printf("[GUIDE %d]: try signaling opposite group\n", my_id);
                 if (shared_data->bridge_queue_aclockwise.count > 0)
                 {
                     printf("[GUIDE %d]: signaling opposite group\n", my_id);
@@ -418,7 +415,6 @@ void operate()
             }
             else
             {
-                printf("[GUIDE %d]: try signaling opposite group\n", my_id);
                 if (shared_data->bridge_queue_clockwise.count > 0)
                 {
                     printf("[GUIDE %d]: signaling opposite group\n", my_id);
@@ -429,7 +425,6 @@ void operate()
             }
 
             b_sem_v(semid, MUTEX_BRIDGE, 1);
-            printf("[GUIDE %d]: left bridge\n", my_id);
 
             if (clockwise_track)
             {
@@ -441,6 +436,8 @@ void operate()
             }
 
             if (leave_park) my_data->status = GS_MOVING_TO_CASH;
+
+            printf("[GUIDE %d]: left bridge\n", my_id);
 
             break;
         }
@@ -464,7 +461,6 @@ void operate()
                 visitors_checkins += msg;
                 printf("[GUIDE %d]: waiting for group to sightsee tower %d/%d\n", my_id, visitors_checkins, visitors_in_group);
             }
-            printf("[GUIDE %d]: left tower\n", my_id);
 
             if (clockwise_track)
             {
@@ -477,6 +473,7 @@ void operate()
 
             if (leave_park) my_data->status = GS_MOVING_TO_CASH;
 
+            printf("[GUIDE %d]: left tower\n", my_id);
             break;
         }
         //manage boarding/steering the ferry
@@ -503,7 +500,6 @@ void operate()
                 {
                     printf("[GUIDE %d]: is not first in line\n", my_id);
                     b_wait_for_wakeup();
-                    printf("[GUIDE %d]: wake up check if first\n", my_id);
                     if (kill_requested) break;
                     if (leave_park)
                     {
@@ -529,7 +525,6 @@ void operate()
                 {
                     printf("[GUIDE %d]: is not first in line\n", my_id);
                     b_wait_for_wakeup();
-                    printf("[GUIDE %d]: wake up check if first\n", my_id);
                     if (kill_requested) break;
                     if (leave_park)
                     {
@@ -549,7 +544,6 @@ void operate()
             {
                 printf("[GUIDE %d]: couldnt board\n", my_id);
                 b_wait_for_wakeup();
-                printf("[GUIDE %d]: wake up tryboard\n", my_id);
                 if (kill_requested) break;
                 if (leave_park)
                 {
@@ -582,7 +576,7 @@ void operate()
                 }
             }
 
-            if (my_data->status == GS_MOVING_TO_CASH && leave_park) break;
+            if (my_data->status == GS_MOVING_TO_CASH && leave_park || kill_requested) break;
 
             b_sem_p(semid, MUTEX_FERRY, 1, (volatile sig_atomic_t* []){&kill_requested}, 1);
 

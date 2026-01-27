@@ -28,11 +28,19 @@ void handle_kill(int sig)
     kill_requested = 1;
 }
 
-void handle_child(int sig)
+pthread_t cleaner_thread = 0;
+void* zombie_cleaner(void* arg)
 {
-    (void)sig;
+    (void)arg;
 
-    b_t_sem_v(&visitor_sem);
+    while(true)
+    {
+        wait(NULL);
+        if (errno == ECHILD) break;
+        b_t_sem_v(&visitor_sem);
+    }
+
+    return NULL;
 }
 
 int main()
@@ -50,6 +58,8 @@ int main()
         new_process = b_execute("./bin/guide", args);
         if (new_process == -1) end_simulation();
     }
+
+    cleaner_thread = b_execute_thread(zombie_cleaner);
 
     while(!kill_requested)
     {
@@ -77,11 +87,6 @@ void init()
     sigaction(SIGINT, &sa, NULL);
     sigaction(SIGTERM, &sa, NULL);
     sigaction(SIGXCPU, &sa, NULL);
-
-    sa.sa_handler = handle_child;
-    sigemptyset(&sa.sa_mask);
-    sa.sa_flags = SA_NOCLDSTOP | SA_NOCLDWAIT; //this makes waiting for child processes unnecessary
-    sigaction(SIGCHLD, &sa, NULL);
 
     sa.sa_handler = SIG_IGN;
     sigemptyset(&sa.sa_mask);
@@ -144,11 +149,16 @@ void init()
     b_sem_set(semid, MUTEX_TOWER, 1);
     b_sem_set(semid, MUTEX_FERRY, 1);
     b_sem_set(semid, MUTEX_ALLOC_VISITOR, 1);
+
+    b_fifo_create(TICKET_REGULAR_PATH);
+    b_fifo_create(TICKET_VIP_PATH);
 }
 
 void end_simulation()
 {
     b_signal(-getpgrp(), SIGINT);
+
+    if(cleaner_thread) pthread_join(cleaner_thread, NULL);
 
     b_shm_dettach(shared_data);
     b_shm_remove(b_shm_get_id(SHM_SHARED_DATA, sizeof(shared_data_t)));
@@ -160,6 +170,9 @@ void end_simulation()
 
     b_sem_remove(semid);
     sem_destroy(&visitor_sem);
+
+    b_fifo_delete(TICKET_REGULAR_PATH);
+    b_fifo_delete(TICKET_VIP_PATH);
 
     exit(EXIT_SUCCESS);
 }

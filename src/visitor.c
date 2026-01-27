@@ -111,13 +111,13 @@ void init()
     srand(getpid() * time(NULL));
 
     if (kill_requested) return;
+    fifo_regular = b_fifo_open(TICKET_REGULAR_PATH, O_WRONLY | O_NONBLOCK);
+    fifo_vip = b_fifo_open(TICKET_VIP_PATH, O_WRONLY | O_NONBLOCK);
+
+    if (kill_requested) return;
     shared_data = b_shm_attach(b_shm_get_id_ifexist(SHM_SHARED_DATA, sizeof(shared_data_t)));
     visitors_data = b_shm_attach(b_shm_get_id_ifexist(SHM_VISITOR_DATA, sizeof(visitor_data_t) * VISITORS_LIMIT));
     if (shared_data == NULL || visitors_data == NULL) end_simulation();
-
-    if (kill_requested) return;
-    fifo_regular = b_fifo_open(TICKET_REGULAR_PATH, O_WRONLY);
-    fifo_vip = b_fifo_open(TICKET_VIP_PATH, O_WRONLY);
 
     if (kill_requested) return;
     msgid_cashier = b_msq_get_id(MSG_CASHIER);
@@ -247,7 +247,6 @@ void operate()
                     {
                         printf("[VIP %d]: is not first in line\n", my_data->pid);
                         b_wait_for_wakeup();
-                        printf("[VTP %d]: wake up check if first\n", my_data->pid);
                         if (kill_requested) break;
                         if (b_get_time_of_day(shared_data->start_time) > OPEN_TIME)
                         {
@@ -275,7 +274,6 @@ void operate()
                     {
                         printf("[VIP %d]: is not first in line\n", my_data->pid);
                         b_wait_for_wakeup();
-                        printf("[VTP %d]: wake up check if first\n", my_data->pid);
                         if (kill_requested) break;
                         if (b_get_time_of_day(shared_data->start_time) > OPEN_TIME)
                         {
@@ -299,7 +297,6 @@ void operate()
                 {
                     printf("[VIP %d]: couldn't pass\n", my_data->pid);
                     b_wait_for_wakeup();
-                    printf("[VIP %d]: wake up trypass\n", my_data->pid);
                     if (kill_requested) break;
                     if (b_get_time_of_day(shared_data->start_time) > OPEN_TIME)
                     {
@@ -565,6 +562,8 @@ void operate()
             {
                 printf("[VIP %d]: arrived at ferry\n", my_data->pid);
 
+                if (kill_requested) break;
+
                 if (b_get_time_of_day(shared_data->start_time) > OPEN_TIME)
                 {
                     printf("[VIP %d]: moving to cashier\n", my_data->pid);
@@ -587,7 +586,6 @@ void operate()
                     {
                         printf("[VIP %d]: is not first in line\n", my_data->pid);
                         b_wait_for_wakeup();
-                        printf("[VIP %d]: wake up check if first\n", my_data->pid);
                         if (kill_requested) break;
                         if (b_get_time_of_day(shared_data->start_time) > OPEN_TIME)
                         {
@@ -616,7 +614,6 @@ void operate()
                     {
                         printf("[VIP %d]: is not first in line\n", my_data->pid);
                         b_wait_for_wakeup();
-                        printf("[VIP %d]: wake up check if first\n", my_data->pid);
                         if (kill_requested) break;
                         if (b_get_time_of_day(shared_data->start_time) > OPEN_TIME)
                         {
@@ -640,7 +637,6 @@ void operate()
                 {
                     printf("[VIP %d]: couldnt board\n", my_data->pid);
                     b_wait_for_wakeup();
-                    printf("[VIP %d]: wake up tryboard\n", my_data->pid);
                     if (kill_requested) break;
                     if (b_get_time_of_day(shared_data->start_time) > OPEN_TIME)
                     {
@@ -676,6 +672,7 @@ void operate()
                     }
                 }
 
+                if (kill_requested) break;
                 if (b_get_time_of_day(shared_data->start_time) > OPEN_TIME && my_data->status == VS_AWAITING_TICKET) break;
 
                 b_sem_p(semid, MUTEX_FERRY, 1, (volatile sig_atomic_t* []){&kill_requested}, 1);
@@ -713,6 +710,8 @@ void operate()
                         b_signal(next_first, SIG_WAKE_UP);
                     }
                 }
+
+                if(kill_requested) break;
 
                 shared_data->ferry_groups_boarded++;
 

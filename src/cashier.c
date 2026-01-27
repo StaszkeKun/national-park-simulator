@@ -182,8 +182,6 @@ void init()
 
     shared_data->cashier_pid = getpid();
 
-    b_fifo_create(TICKET_REGULAR_PATH);
-    b_fifo_create(TICKET_VIP_PATH);
     fifo_regular = b_fifo_open(TICKET_REGULAR_PATH, O_RDONLY);
     fifo_vip = b_fifo_open(TICKET_VIP_PATH, O_RDONLY);
 
@@ -208,9 +206,7 @@ void end_simulation()
     b_shm_dettach(guides_data);
 
     if (fifo_regular >= 0) b_fifo_close(fifo_regular);
-    b_fifo_delete(TICKET_REGULAR_PATH);
     if (fifo_vip >= 0) b_fifo_close(fifo_vip);
-    b_fifo_delete(TICKET_VIP_PATH);
 
     exit(EXIT_SUCCESS);
 }
@@ -275,6 +271,7 @@ void sell_ticket(visitor_data_t* visitor_data)
     while(b_msq_available_slots(msgid) <= 1)
     {
         b_wait_for_wakeup(); //this helps leave 1 message slot available preventing deadlocks
+        if (kill_requested) return;
     }
 
     b_msq_send(msgid, 1, visitor_data->pid);

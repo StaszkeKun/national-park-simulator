@@ -497,7 +497,7 @@ void operate()
                 b_sem_v(semid, MUTEX_FERRY, 1);
 
                 if (kill_requested) break;
-                while(!check_if_first_secure(&shared_data->ferry_queue_clockwise, MUTEX_FERRY) && shared_data->ferry_vipqueue_clockwise.count == 0)
+                while(!check_if_first_secure(&shared_data->ferry_queue_clockwise, MUTEX_FERRY))
                 {
                     printf("[GUIDE %d]: is not first in line\n", my_id);
                     b_wait_for_wakeup();
@@ -522,7 +522,7 @@ void operate()
                 b_sem_v(semid, MUTEX_FERRY, 1);
 
                 if (kill_requested) break;
-                while(!check_if_first_secure(&shared_data->ferry_queue_aclockwise, MUTEX_FERRY) && shared_data->ferry_vipqueue_aclockwise.count == 0)
+                while(!check_if_first_secure(&shared_data->ferry_queue_aclockwise, MUTEX_FERRY))
                 {
                     printf("[GUIDE %d]: is not first in line\n", my_id);
                     b_wait_for_wakeup();
@@ -854,7 +854,7 @@ bool try_board_ferry()
         return false;
     }
 
-    if (b_sem_check(semid, SEM_FERRY) < 1 + visitors_in_group  || shared_data->ferry_seats_taken >= FERRY_LIMIT)
+    if (b_sem_check(semid, SEM_FERRY) < 1 + visitors_in_group || shared_data->ferry_seats_taken >= FERRY_LIMIT)
     {
         printf("[GUIDE %d]: couldn't fit on ferry - alerting captain\n", my_id);
         b_signal(shared_data->ferry_seats[0], SIG_WAKE_UP);
@@ -887,6 +887,7 @@ bool check_if_first_secure(void* buf, int mutex)
         return true;
     }
 
+    b_signal(first_element, SIG_WAKE_UP);
     b_sem_v(semid, mutex, 1);
     return false;
 }

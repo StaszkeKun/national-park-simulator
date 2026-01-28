@@ -997,6 +997,7 @@ bool check_if_first_secure(void* buf, int mutex)
         return true;
     }
 
+    b_signal(first_element, SIG_WAKE_UP);
     b_sem_v(semid, mutex, 1);
     return false;
 }

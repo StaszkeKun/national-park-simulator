@@ -38,7 +38,7 @@ void* zombie_cleaner(void* arg)
     b_sleep(BRIDGE_FIX_TIME, NULL, 0);
     b_sem_v(semid, MUTEX_BRIDGE, 1);
     #endif
-    
+
     while(true)
     {
         wait(NULL);
@@ -173,6 +173,9 @@ void end_simulation()
         pthread_join(cleaner_thread, NULL);
     }
 
+    int f1 = b_fifo_open(TICKET_REGULAR_PATH, O_RDONLY | O_NONBLOCK); //dummy readers to prevent visitor blocking that required 2x CTRL+C
+    int f2 = b_fifo_open(TICKET_VIP_PATH, O_RDONLY | O_NONBLOCK);
+
     while(true)
     {
         wait(NULL);
@@ -189,6 +192,9 @@ void end_simulation()
 
     b_sem_remove(semid);
     sem_destroy(&visitor_sem);
+
+    if (f1) b_fifo_close(f1);
+    if (f2) b_fifo_close(f2);
 
     b_fifo_delete(TICKET_REGULAR_PATH);
     b_fifo_delete(TICKET_VIP_PATH);

@@ -372,7 +372,7 @@ int b_msq_get_id(int id)
     return msqid;
 }
 
-void b_msq_send(int msqid, long type, long message)
+void b_msq_send(int msqid, long type, long message, volatile sig_atomic_t* cond)
 {
     message_t msg;
     msg.mtype = type;
@@ -381,7 +381,8 @@ void b_msq_send(int msqid, long type, long message)
     {
         if (errno == EINTR)
         {
-            b_msq_send(msqid, type, message);
+            if(cond != NULL && *cond) return;
+            b_msq_send(msqid, type, message, cond);
             return;
         }
 

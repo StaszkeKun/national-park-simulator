@@ -68,23 +68,29 @@ int main()
     init();
 
     pid_t current_pid;
+    bool night = false;
 
     while(!kill_requested)
     {
         //setup for new day
         if (b_get_time_of_day(shared_data->start_time) <= OPEN_TIME && !setup_today)
         {
+            setup_today = true;
             if (day != 0) end_log();
+            if (log_file != NULL) fclose(log_file);
+            log_file = NULL;
 
+            night = false;
             visitors_today = 0;
             kids_today = 0;
             gold_today = 0;
             day++;
-            setup_today = true;
-            printf("//////////DAY %d//////////\n", day);
 
-            if (log_file != NULL) fclose(log_file);
-            log_file = NULL;
+            if (day > DAYS_LIMIT)
+            {
+                break;
+            }
+            printf("//////////DAY %d//////////\n", day);
 
             char title[100];
             char date[32];
@@ -99,6 +105,7 @@ int main()
         if (b_get_time_of_day(shared_data->start_time) > OPEN_TIME && setup_today)
         {
             printf("//////////NIGHT FELL//////////\n");
+            night = true;
             for(int i = 0; i < GUIDES_NUMBER; i++)
             {
                 b_signal(guides_data[i].pid, SIG_LEAVE_PARK);
@@ -120,7 +127,6 @@ int main()
                 b_signal(pid_in_queue, SIGINT);
             }
 
-            end_log();
             setup_today = false;
         }
 
@@ -143,7 +149,7 @@ int main()
 
         visitor_data_t* current_visitor_data = b_get_visitor_by_pid(visitors_data, current_pid);
 
-        if (b_get_time_of_day(shared_data->start_time) > OPEN_TIME)
+        if (night)
         {
             printf("[CASHIER]: Visitor %d with %d kids dismissed - closing hours\n", current_pid, current_visitor_data->kids_count);
             current_visitor_data->status = VS_LEAVING;
@@ -202,20 +208,24 @@ void init()
     fds[1].events = POLLIN;
 
     leaving_thread = b_execute_thread(print_leaving);
+
+    setvbuf(stdout, NULL, _IOLBF, 0);
+    setvbuf(stderr, NULL, _IOLBF, 0);
 }
 
 void end_simulation()
 {
-    if (leaving_thread)
-    {
-        pthread_cancel(leaving_thread);
-        pthread_join(leaving_thread, NULL);
-    }
-
     if (kill_requested)
     {
         end_log();
         if (log_file != NULL) fclose(log_file);
+    }
+    else b_signal(getppid(), SIGINT);
+
+    if (leaving_thread)
+    {
+        pthread_cancel(leaving_thread);
+        pthread_join(leaving_thread, NULL);
     }
 
     b_shm_dettach(shared_data);
@@ -293,7 +303,7 @@ void sell_ticket(visitor_data_t* visitor_data)
         if (kill_requested) return;
     }
 
-    b_msq_send(msgid, 1, visitor_data->pid);
+    b_msq_send(msgid, 1, visitor_data->pid, &kill_requested);
     b_signal(visitor_data->pid, SIG_WAKE_UP);
 }
 

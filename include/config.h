@@ -70,8 +70,8 @@
 #define CLOSE_TIME 3600
 #define VIP_CHANCE 0.2
 #define GUIDES_NUMBER 25
-#define BRIDGE_CROSS_MIN_TIME 3
-#define BRIDGE_CROSS_MAX_TIME 3
+#define BRIDGE_CROSS_MIN_TIME 0
+#define BRIDGE_CROSS_MAX_TIME 0
 #define GUIDES_MOVETIME_MIN 0
 #define GUIDES_MOVETIME_MAX 0
 #define FERRY_VOYAGE_TIME 0
@@ -168,8 +168,8 @@
 #define TICKET_PRICE 2 //only needed for daily raports
 #endif
 
-#ifndef DAY_LIMIT
-#define DAY_LIMIT 5 // number of days after which simulation will end
+#ifndef DAYS_LIMIT
+#define DAYS_LIMIT 2 // number of days after which simulation will end
 #endif
 
 #ifndef OPEN_TIME

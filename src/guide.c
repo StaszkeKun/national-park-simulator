@@ -131,6 +131,9 @@ void init()
     semid = b_sem_get_id();
 
     register_guide();
+
+    setvbuf(stdout, NULL, _IOLBF, 0);
+    setvbuf(stderr, NULL, _IOLBF, 0);
 }
 
 void end_simulation()
@@ -171,7 +174,7 @@ void operate()
                     }
                     else
                     {
-                        b_msq_send(msgid_cashier, 1, visitor_pid);
+                        b_msq_send(msgid_cashier, 1, visitor_pid, &kill_requested);
                         printf("[GUIDE %d]: %ld didn't fit group - sending to queue\n", my_id, visitor_pid);
                         b_sleep(GUIDES_GATHER_CHECK_INTERVAL, (volatile sig_atomic_t* []){&kill_requested, &leave_park}, 2);
                     }
@@ -754,7 +757,7 @@ void operate()
             printf("[GUIDE %d]: arrived at cashier\n", my_id);
             for(int i = 0; i < my_data->group_count; i++)
             {
-                b_msq_send(msgid_cashier, 2, my_data->groups[i]->pid);
+                b_msq_send(msgid_cashier, 2, my_data->groups[i]->pid, &kill_requested);
             }
             printf("[GUIDE %d]: finished leaving report\n", my_id);
             //clean up for next tour

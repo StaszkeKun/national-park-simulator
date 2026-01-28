@@ -122,6 +122,9 @@ void init()
     if (kill_requested) return;
     semid = b_sem_get_id();
     register_visitor();
+
+    setvbuf(stdout, NULL, _IOLBF, 0);
+    setvbuf(stderr, NULL, _IOLBF, 0);
 }
 
 void end_simulation()
@@ -174,7 +177,7 @@ void operate()
                 {
                     printf("[VIP %d]: moving to cashier\n", my_data->pid);
                     b_sleep(b_randf(GUIDES_MOVETIME_MIN, GUIDES_MOVETIME_MAX), (volatile sig_atomic_t* []){&kill_requested}, 1);
-                    b_msq_send(msgid_cashier, 2, my_data->pid);
+                    b_msq_send(msgid_cashier, 2, my_data->pid, &kill_requested);
                     my_data->status = VS_AWAITING_TICKET;
                     break;
                 }
@@ -196,6 +199,7 @@ void operate()
             }
             else
             {
+                if (kill_requested) break;
                 b_wait_for_wakeup();
             }
             break;
@@ -205,6 +209,7 @@ void operate()
         case VS_AWAITING_START:
         case VS_AT_BRIDGE_QUEUE:
         {
+            if (kill_requested) break;
             b_wait_for_wakeup();
             break;
         }
@@ -212,6 +217,7 @@ void operate()
         {
             leave_park = 0;
             leave_tower = 0;
+            if (kill_requested) break;
             b_wait_for_wakeup();
             break;
         }
@@ -226,7 +232,7 @@ void operate()
                 {
                     printf("[VIP %d]: moving to cashier\n", my_data->pid);
                     b_sleep(b_randf(GUIDES_MOVETIME_MIN, GUIDES_MOVETIME_MAX), (volatile sig_atomic_t* []){&kill_requested}, 1);
-                    b_msq_send(msgid_cashier, 2, my_data->pid);
+                    b_msq_send(msgid_cashier, 2, my_data->pid, &kill_requested);
                     my_data->status = VS_AWAITING_TICKET;
                     break;
                 }
@@ -253,7 +259,7 @@ void operate()
                             b_sem_v(semid, MUTEX_BRIDGE, 1);
                             printf("[VIP %d]: moving to cashier\n", my_data->pid);
                             b_sleep(b_randf(GUIDES_MOVETIME_MIN, GUIDES_MOVETIME_MAX), (volatile sig_atomic_t* []){&kill_requested}, 1);
-                            b_msq_send(msgid_cashier, 2, my_data->pid);
+                            b_msq_send(msgid_cashier, 2, my_data->pid, &kill_requested);
                             my_data->status = VS_AWAITING_TICKET;
                             break;
                         }
@@ -281,7 +287,7 @@ void operate()
                             b_sem_v(semid, MUTEX_BRIDGE, 1);
                             printf("[VIP %d]: moving to cashier\n", my_data->pid);
                             b_sleep(b_randf(GUIDES_MOVETIME_MIN, GUIDES_MOVETIME_MAX), (volatile sig_atomic_t* []){&kill_requested}, 1);
-                            b_msq_send(msgid_cashier, 2, my_data->pid);
+                            b_msq_send(msgid_cashier, 2, my_data->pid, &kill_requested);
                             my_data->status = VS_AWAITING_TICKET;
                             break;
                         }
@@ -324,7 +330,7 @@ void operate()
                         b_sem_v(semid, MUTEX_BRIDGE, 1);
                         printf("[VIP %d]: moving to cashier\n", my_data->pid);
                         b_sleep(b_randf(GUIDES_MOVETIME_MIN, GUIDES_MOVETIME_MAX), (volatile sig_atomic_t* []){&kill_requested}, 1);
-                        b_msq_send(msgid_cashier, 2, my_data->pid);
+                        b_msq_send(msgid_cashier, 2, my_data->pid, &kill_requested);
                         my_data->status = VS_AWAITING_TICKET;
                         break;
                     }
@@ -397,7 +403,7 @@ void operate()
                 {
                     printf("[VIP %d]: moving to cashier\n", my_data->pid);
                     b_sleep(b_randf(GUIDES_MOVETIME_MIN, GUIDES_MOVETIME_MAX), (volatile sig_atomic_t* []){&kill_requested}, 1);
-                    b_msq_send(msgid_cashier, 2, my_data->pid);
+                    b_msq_send(msgid_cashier, 2, my_data->pid, &kill_requested);
                     my_data->status = VS_AWAITING_TICKET;
                     break;
                 }
@@ -412,7 +418,7 @@ void operate()
                 {
                     printf("[VIP %d]: moving to cashier\n", my_data->pid);
                     b_sleep(b_randf(GUIDES_MOVETIME_MIN, GUIDES_MOVETIME_MAX), (volatile sig_atomic_t* []){&kill_requested}, 1);
-                    b_msq_send(msgid_cashier, 2, my_data->pid);
+                    b_msq_send(msgid_cashier, 2, my_data->pid, &kill_requested);
                     my_data->status = VS_AWAITING_TICKET;
                 }
 
@@ -427,7 +433,7 @@ void operate()
                 b_sem_v(semid, SEM_BRIDGE, 1 + my_data->kids_count);
 
                 my_data->status = VS_FOLLOWING_GUIDE;
-                b_msq_send(msgid_guide, my_data->asigned_guide + 1, my_data->kids_count + 1);
+                b_msq_send(msgid_guide, my_data->asigned_guide + 1, my_data->kids_count + 1, &kill_requested);
                 break;
             }
         }
@@ -438,7 +444,7 @@ void operate()
             {
                 my_data->status = VS_FOLLOWING_GUIDE;
 
-                b_msq_send(msgid_guide, my_data->asigned_guide + 1, 1 + my_data->kids_count);
+                b_msq_send(msgid_guide, my_data->asigned_guide + 1, 1 + my_data->kids_count, &kill_requested);
 
                 break;
             }
@@ -456,7 +462,7 @@ void operate()
                 ringbuffer_erase(&shared_data->tower_queue, pos_queue);
                 b_sem_v(semid, MUTEX_TOWER, 1);
                 my_data->status = VS_FOLLOWING_GUIDE;
-                b_msq_send(msgid_guide, my_data->asigned_guide + 1, 1 + my_data->kids_count);
+                b_msq_send(msgid_guide, my_data->asigned_guide + 1, 1 + my_data->kids_count, &kill_requested);
                 break;
             }
 
@@ -471,7 +477,7 @@ void operate()
                     ringbuffer_erase(&shared_data->tower_queue, pos_queue);
                     b_sem_v(semid, MUTEX_TOWER, 1);
                     my_data->status = VS_FOLLOWING_GUIDE;
-                    b_msq_send(msgid_guide, my_data->asigned_guide + 1, 1 + my_data->kids_count);
+                    b_msq_send(msgid_guide, my_data->asigned_guide + 1, 1 + my_data->kids_count, &kill_requested);
                     break;
                 }
             }
@@ -522,7 +528,7 @@ void operate()
                 {
                     printf("[VIP %d]: moving to cashier\n", my_data->pid);
                     b_sleep(b_randf(GUIDES_MOVETIME_MIN, GUIDES_MOVETIME_MAX), (volatile sig_atomic_t* []){&kill_requested}, 1);
-                    b_msq_send(msgid_cashier, 2, my_data->pid);
+                    b_msq_send(msgid_cashier, 2, my_data->pid, &kill_requested);
                     my_data->status = VS_AWAITING_TICKET;
                     break;
                 }
@@ -543,7 +549,7 @@ void operate()
             else
             {
                 my_data->status = VS_FOLLOWING_GUIDE;
-                b_msq_send(msgid_guide, my_data->asigned_guide + 1, 1 + my_data->kids_count);
+                b_msq_send(msgid_guide, my_data->asigned_guide + 1, 1 + my_data->kids_count, &kill_requested);
             }
 
             break;
@@ -551,7 +557,7 @@ void operate()
         case VS_AT_FERRY_BOARDING:
         {
             my_data->status = VS_AWAITING_FERRY_START;
-            b_msq_send(msgid_guide, my_data->asigned_guide + 1, 1 + my_data->kids_count);
+            b_msq_send(msgid_guide, my_data->asigned_guide + 1, 1 + my_data->kids_count, &kill_requested);
             break;
         }
         //vip manage to board/steer ferry on their own
@@ -567,7 +573,7 @@ void operate()
                 {
                     printf("[VIP %d]: moving to cashier\n", my_data->pid);
                     b_sleep(b_randf(GUIDES_MOVETIME_MIN, GUIDES_MOVETIME_MAX), (volatile sig_atomic_t* []){&kill_requested}, 1);
-                    b_msq_send(msgid_cashier, 2, my_data->pid);
+                    b_msq_send(msgid_cashier, 2, my_data->pid, &kill_requested);
                     my_data->status = VS_AWAITING_TICKET;
                     break;
                 }
@@ -594,7 +600,7 @@ void operate()
                             b_sem_v(semid, MUTEX_FERRY, 1);
                             printf("[VIP %d]: moving to cashier\n", my_data->pid);
                             b_sleep(b_randf(GUIDES_MOVETIME_MIN, GUIDES_MOVETIME_MAX), (volatile sig_atomic_t* []){&kill_requested}, 1);
-                            b_msq_send(msgid_cashier, 2, my_data->pid);
+                            b_msq_send(msgid_cashier, 2, my_data->pid, &kill_requested);
                             my_data->status = VS_AWAITING_TICKET;
                             break;
                         }
@@ -622,7 +628,7 @@ void operate()
                             b_sem_v(semid, MUTEX_FERRY, 1);
                             printf("[VIP %d]: moving to cashier\n", my_data->pid);
                             b_sleep(b_randf(GUIDES_MOVETIME_MIN, GUIDES_MOVETIME_MAX), (volatile sig_atomic_t* []){&kill_requested}, 1);
-                            b_msq_send(msgid_cashier, 2, my_data->pid);
+                            b_msq_send(msgid_cashier, 2, my_data->pid, &kill_requested);
                             my_data->status = VS_AWAITING_TICKET;
                             break;
                         }
@@ -665,7 +671,7 @@ void operate()
                         b_sem_v(semid, MUTEX_FERRY, 1);
                         printf("[VIP %d]: moving to cashier\n", my_data->pid);
                         b_sleep(b_randf(GUIDES_MOVETIME_MIN, GUIDES_MOVETIME_MAX), (volatile sig_atomic_t* []){&kill_requested}, 1);
-                        b_msq_send(msgid_cashier, 2, my_data->pid);
+                        b_msq_send(msgid_cashier, 2, my_data->pid, &kill_requested);
                         my_data->status = VS_AWAITING_TICKET;
                         break;
                     }
@@ -812,7 +818,7 @@ void operate()
                 {
                     printf("[VIP %d]: moving to cashier\n", my_data->pid);
                     b_sleep(b_randf(GUIDES_MOVETIME_MIN, GUIDES_MOVETIME_MAX), (volatile sig_atomic_t* []){&kill_requested}, 1);
-                    b_msq_send(msgid_cashier, 2, my_data->pid);
+                    b_msq_send(msgid_cashier, 2, my_data->pid, &kill_requested);
                     my_data->status = VS_AWAITING_TICKET;
                     break;
                 }
@@ -821,7 +827,7 @@ void operate()
                 {
                     printf("[VIP %d]: moving to cashier\n", my_data->pid);
                     b_sleep(b_randf(GUIDES_MOVETIME_MIN, GUIDES_MOVETIME_MAX), (volatile sig_atomic_t* []){&kill_requested}, 1);
-                    b_msq_send(msgid_cashier, 2, my_data->pid);
+                    b_msq_send(msgid_cashier, 2, my_data->pid, &kill_requested);
                     my_data->status = VS_AWAITING_TICKET;
                 }
                 else
@@ -836,7 +842,7 @@ void operate()
                 b_wait_for_wakeup();
                 if (kill_requested) break;
                 my_data->status = VS_FOLLOWING_GUIDE;
-                b_msq_send(msgid_guide, my_data->asigned_guide + 1, 1 + my_data->kids_count);
+                b_msq_send(msgid_guide, my_data->asigned_guide + 1, 1 + my_data->kids_count, &kill_requested);
             }
             break;
         }

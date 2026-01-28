@@ -1,14 +1,26 @@
 #pragma once
 
 #ifdef big_numbers
-#define VISITORS_LIMIT 5000
+#define VISITORS_LIMIT 10000
 #define GUIDES_NUMBER 25
 #define GROUP_SIZE 25
 #define BRIDGE_LIMIT 20
 #define TOWER_LIMIT 35
 #define FERRY_LIMIT 30
-#define OPEN_TIME 60
-#define CLOSE_TIME 60
+#define OPEN_TIME 15
+#define CLOSE_TIME 5
+#define GUIDES_GATHER_WAIT 0
+#define GUIDES_GATHER_CHECK_INTERVAL 0
+#define GUIDES_MOVETIME_MIN 0
+#define GUIDES_MOVETIME_MAX 0
+#define BRIDGE_CROSS_MIN_TIME 0
+#define BRIDGE_CROSS_MAX_TIME 0
+#define TOWER_ACTION_MIN_TIME 0
+#define TOWER_ACTION_MAX_TIME 0
+#define FERRY_VOYAGE_TIME 0
+#define VISITOR_SPAWN_MIN_INTERVAL 0
+#define VISITOR_SPAWN_MAX_INTERVAL 0
+#define TICKET_SALE_TIME 0
 #endif
 
 #ifdef only_vip
@@ -37,6 +49,7 @@
 #define TICKET_SALE_TIME 0
 #define OPEN_TIME 1
 #define CLOSE_TIME 1
+#define DAYS_LIMIT 5
 #endif
 
 #ifdef big_numbers
@@ -48,6 +61,7 @@
 #ifdef asleep_guide
 #define GUIDE_WAKE_UP_TIME 30 //in seconds
 #define CONSTANT_VISITOR_SPAWN false
+#define DAYS_LIMIT 1
 
 #define VISITORS_LIMIT 5000
 #define VISITOR_SPAWN_MIN_INTERVAL 0
@@ -61,6 +75,7 @@
 #ifdef broken_bridge
 #define BRIDGE_FIX_TIME 30 //in seconds
 #define CONSTANT_VISITOR_SPAWN false
+#define DAYS_LIMIT 1
 
 #define VISITORS_LIMIT 3000
 #define VISITOR_SPAWN_MIN_INTERVAL 0

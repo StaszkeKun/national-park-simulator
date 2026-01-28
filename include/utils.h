@@ -66,7 +66,7 @@ pthread_t b_execute_thread(void* (*func)(void *))
     if (pthread_create(&tid, NULL, func, NULL) != 0)
     {
         perror("[ERROR]: execute thread error");
-        exit(EXIT_FAILURE);
+        b_raise(SIGINT);
     }
     return tid;
 }
@@ -386,7 +386,7 @@ void b_msq_send(int msqid, long type, long message, volatile sig_atomic_t* cond)
     {
         if (errno == EINTR)
         {
-            if(cond != NULL && *cond) return;
+            if (cond != NULL && *cond) return;
             b_msq_send(msqid, type, message, cond);
             return;
         }

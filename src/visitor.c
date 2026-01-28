@@ -716,7 +716,7 @@ void operate()
                     }
                 }
 
-                if(kill_requested) break;
+                if (kill_requested) break;
 
                 shared_data->ferry_groups_boarded++;
 

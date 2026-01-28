@@ -85,10 +85,6 @@ int main()
 
 void init()
 {
-    printf("IMPLEMENT DAY LIMIT?\n");
-    printf("IMPLEMENT TOWER TEST\n");
-    printf("IMPLEMENT FERRY TEST\n");
-    printf("RAPORT REVAMP\n");
     struct sigaction sa;
     sa.sa_handler = handle_kill;
     sigemptyset(&sa.sa_mask);
@@ -165,9 +161,7 @@ void init()
 
 void end_simulation()
 {
-    b_signal(-getpgrp(), SIGINT);
-
-    if(cleaner_thread)
+    if (cleaner_thread)
     {
         pthread_cancel(cleaner_thread);
         pthread_join(cleaner_thread, NULL);
@@ -175,6 +169,8 @@ void end_simulation()
 
     int f1 = b_fifo_open(TICKET_REGULAR_PATH, O_RDONLY | O_NONBLOCK); //dummy readers to prevent visitor blocking that required 2x CTRL+C
     int f2 = b_fifo_open(TICKET_VIP_PATH, O_RDONLY | O_NONBLOCK);
+
+    b_signal(-getpgrp(), SIGINT);
 
     while(true)
     {
